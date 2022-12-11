@@ -40,6 +40,7 @@ module com.infomaximum.platform {
     exports com.infomaximum.platform.component.frontend.struct;
     exports com.infomaximum.platform.component.frontend.context.source;
     exports com.infomaximum.platform.component.frontend.engine.service.statistic;
+    exports com.infomaximum.platform.component.frontend.engine.filter;
     exports com.infomaximum.platform.component.frontend.request;
     exports com.infomaximum.platform.component.frontend.context.source.impl;
     exports com.infomaximum.platform.component.frontend.engine;

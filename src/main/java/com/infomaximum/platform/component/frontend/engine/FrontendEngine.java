@@ -12,6 +12,7 @@ import com.infomaximum.network.transport.http.builder.HttpBuilderTransport;
 import com.infomaximum.platform.Platform;
 import com.infomaximum.platform.component.frontend.engine.authorize.RequestAuthorize;
 import com.infomaximum.platform.component.frontend.engine.controller.Controllers;
+import com.infomaximum.platform.component.frontend.engine.filter.FilterGRequest;
 import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.GraphQLRequestExecuteService;
 import com.infomaximum.platform.component.frontend.engine.service.requestcomplete.RequestCompleteCallbackService;
 import com.infomaximum.platform.component.frontend.engine.service.statistic.StatisticService;
@@ -20,6 +21,10 @@ import com.infomaximum.platform.component.frontend.engine.uploadfile.FrontendMul
 import com.infomaximum.platform.component.frontend.request.graphql.builder.GraphQLRequestBuilder;
 import com.infomaximum.platform.component.frontend.request.graphql.builder.impl.DefaultGraphQLRequestBuilder;
 import com.infomaximum.platform.sdk.component.Component;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 public class FrontendEngine implements AutoCloseable {
 
@@ -38,6 +43,8 @@ public class FrontendEngine implements AutoCloseable {
 
     private GraphQLRequestExecuteService graphQLRequestExecuteService;
 
+    private List<FilterGRequest> filterGRequests;
+
     private Network network;
 
     private final StatisticService statisticService;
@@ -53,6 +60,8 @@ public class FrontendEngine implements AutoCloseable {
 
         this.graphQLEngine = builder.platform.getGraphQLEngine();
         this.graphQLSubscribeEngine = graphQLEngine.buildSubscribeEngine();
+
+        this.filterGRequests = (builder.filterGRequests.isEmpty())? null : Collections.unmodifiableList(builder.filterGRequests);
 
         this.requestAuthorizeBuilder = builder.requestAuthorizeBuilder;
 
@@ -114,6 +123,10 @@ public class FrontendEngine implements AutoCloseable {
         return graphQLRequestBuilder;
     }
 
+    public List<FilterGRequest> getFilterGRequests() {
+        return filterGRequests;
+    }
+
     public GraphQLRequestExecuteService getGraphQLRequestExecuteService() {
         return graphQLRequestExecuteService;
     }
@@ -147,6 +160,8 @@ public class FrontendEngine implements AutoCloseable {
 
         private GraphQLRequestBuilder.Builder graphQLRequestBuilder = new DefaultGraphQLRequestBuilder.Builder();
 
+        private List<FilterGRequest> filterGRequests = new ArrayList<>();
+
         private StatisticService statisticService = new StatisticServiceImpl();
 
         public Builder(Platform platform, Component component) {
@@ -166,6 +181,11 @@ public class FrontendEngine implements AutoCloseable {
 
         public Builder withGraphQLRequestBuilder(GraphQLRequestBuilder.Builder graphQLRequestBuilder) {
             this.graphQLRequestBuilder = graphQLRequestBuilder;
+            return this;
+        }
+
+        public Builder withFilterGRequest(FilterGRequest filter) {
+            filterGRequests.add(filter);
             return this;
         }
 

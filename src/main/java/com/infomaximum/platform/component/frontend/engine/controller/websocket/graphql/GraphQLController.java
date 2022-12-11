@@ -9,12 +9,14 @@ import com.infomaximum.network.protocol.standard.packet.TargetPacket;
 import com.infomaximum.network.protocol.standard.session.StandardTransportSession;
 import com.infomaximum.network.struct.RemoteAddress;
 import com.infomaximum.platform.component.frontend.engine.FrontendEngine;
+import com.infomaximum.platform.component.frontend.engine.filter.FilterGRequest;
 import com.infomaximum.platform.component.frontend.engine.network.protocol.GraphQLSubscriber;
 import com.infomaximum.platform.component.frontend.engine.network.protocol.standard.subscriber.WebSocketStandardSubscriber;
 import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.GraphQLRequestExecuteService;
 import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.struct.GraphQLResponse;
 import com.infomaximum.platform.component.frontend.request.GRequestWebSocket;
 import com.infomaximum.platform.exception.GraphQLWrapperPlatformException;
+import com.infomaximum.platform.exception.PlatformException;
 import com.infomaximum.platform.sdk.exception.GeneralExceptionBuilder;
 import net.minidev.json.JSONObject;
 import org.slf4j.Logger;
@@ -74,6 +76,18 @@ public class GraphQLController {
                 parameters,
                 null
         );
+
+        try {
+            if(frontendEngine.getFilterGRequests() != null) {
+                for (FilterGRequest filter : frontendEngine.getFilterGRequests()) {
+                    filter.filter(gRequest);
+                }
+            }
+        } catch (PlatformException e) {
+            GraphQLWrapperPlatformException graphQLWrapperSubsystemException = new GraphQLWrapperPlatformException(e);
+            JSONObject out = graphQLRequestExecuteService.buildResponse(graphQLWrapperSubsystemException).data;
+            return CompletableFuture.completedFuture(ResponseEntity.error(out));
+        }
 
         return frontendEngine.getGraphQLRequestExecuteService()
                 .execute(gRequest)

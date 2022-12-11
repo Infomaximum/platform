@@ -5,6 +5,7 @@ import com.infomaximum.cluster.graphql.executor.struct.GSubscriptionPublisher;
 import com.infomaximum.cluster.graphql.struct.GRequest;
 import com.infomaximum.cluster.graphql.subscription.SingleSubscriber;
 import com.infomaximum.platform.component.frontend.engine.FrontendEngine;
+import com.infomaximum.platform.component.frontend.engine.filter.FilterGRequest;
 import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.GraphQLRequestExecuteService;
 import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.struct.GraphQLResponse;
 import com.infomaximum.platform.component.frontend.engine.service.requestcomplete.RequestCompleteCallbackService;
@@ -57,6 +58,17 @@ public class GraphQLController {
                 GRequestUtils.getTraceRequest(gRequest),
                 gRequest.getRemoteAddress().endRemoteAddress
         );
+
+        try {
+            if(frontendEngine.getFilterGRequests() != null) {
+                for (FilterGRequest filter : frontendEngine.getFilterGRequests()) {
+                    filter.filter(gRequest);
+                }
+            }
+        } catch (PlatformException e) {
+            GraphQLWrapperPlatformException graphQLWrapperSubsystemException = GraphQLRequestExecuteService.coercionGraphQLSubsystemException(e);
+            return CompletableFuture.completedFuture(buildResponseEntity(null, graphQLWrapperSubsystemException));
+        }
 
         return frontendEngine.getGraphQLRequestExecuteService().execute(gRequest)
                 .whenComplete((graphQLResponse, throwable) -> {//Встраиваемся в поток, и прокидавыем все(включая ошибки) дальше
