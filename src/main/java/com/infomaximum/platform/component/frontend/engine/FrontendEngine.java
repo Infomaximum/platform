@@ -1,7 +1,7 @@
 package com.infomaximum.platform.component.frontend.engine;
 
 import com.infomaximum.cluster.core.remote.controller.clusterfile.RControllerClusterFileImpl;
-import com.infomaximum.cluster.core.service.transport.executor.ExecutorTransportImpl;
+import com.infomaximum.cluster.core.service.transport.executor.ComponentExecutorTransportImpl;
 import com.infomaximum.cluster.graphql.GraphQLEngine;
 import com.infomaximum.cluster.graphql.executor.subscription.GraphQLSubscribeEngine;
 import com.infomaximum.network.Network;
@@ -89,7 +89,7 @@ public class FrontendEngine implements AutoCloseable {
         this.controllers = new Controllers(this);
     }
 
-    public ExecutorTransportImpl.Builder registerControllers(ExecutorTransportImpl.Builder builder) {
+    public ComponentExecutorTransportImpl.Builder registerControllers(ComponentExecutorTransportImpl.Builder builder) {
         return builder
                 .withRemoteController(
                         platform.getGraphQLEngine().buildRemoteControllerGraphQLSubscribe(component, graphQLSubscribeEngine)

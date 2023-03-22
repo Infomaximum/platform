@@ -57,7 +57,7 @@ repositories {
 
 dependencies {
 
-    api 'com.infomaximum:cluster:1.1.5p9'
+    api 'com.infomaximum:cluster:1.1.6p3'
 //    api project(':cluster')
 
     api 'com.infomaximum:cluster-graphql:1.1.4p9'
@@ -91,11 +91,11 @@ dependencies {
         exclude group: 'com.google.code.findbugs', module: 'jsr305'
     }
 
-    implementation 'org.slf4j:slf4j-api:2.0.3'
+    implementation 'org.slf4j:slf4j-api:2.0.6'
 
-    testImplementation 'org.junit.jupiter:junit-jupiter-engine:5.9.0'
-    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.0'
-    testImplementation group: 'org.assertj', name: 'assertj-core', version: '3.13.2'
+    testImplementation 'org.junit.jupiter:junit-jupiter-engine:5.9.2'
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.2'
+    testImplementation 'org.assertj:assertj-core:3.24.2'
 }
 
 task test_integration(type: Test, description: 'Integration test', group: 'Verification') {}

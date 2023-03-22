@@ -45,7 +45,6 @@ public class Platform implements AutoCloseable {
 			this.cluster = builder.clusterBuilder
 					.withContext(new ClusterContext(this, builder.clusterContext))
 					.withExceptionBuilder(new ClusterExceptionBuilder())
-					.withUncaughtExceptionHandler(uncaughtExceptionHandler)
 					.build();
 			this.queryPool = new QueryPool(builder.uncaughtExceptionHandler);
 
@@ -106,26 +105,30 @@ public class Platform implements AutoCloseable {
 
 	public static class Builder {
 
-		private Thread.UncaughtExceptionHandler uncaughtExceptionHandler;
+		public final Thread.UncaughtExceptionHandler uncaughtExceptionHandler;
 
-		private DatabaseConfigure databaseConfigure;
-
-		private Cluster.Builder clusterBuilder;
-		private Object clusterContext;
+		public final Cluster.Builder clusterBuilder;
 
 		public final GraphQLEngine.Builder graphQLEngineBuilder;
 
+		private DatabaseConfigure databaseConfigure;
+		private Object clusterContext;
+
 		public Builder() {
+			this(
+					new Thread.UncaughtExceptionHandler() {
+						@Override
+						public void uncaughtException(Thread t, Throwable e) {
+							log.error("Uncaught exception", e);
+						}
+					}
+			);
+		}
 
-			//default configure
-			this.uncaughtExceptionHandler = new Thread.UncaughtExceptionHandler() {
-				@Override
-				public void uncaughtException(Thread t, Throwable e) {
-					log.error("Uncaught exception", e);
-				}
-			};
+		public Builder(Thread.UncaughtExceptionHandler uncaughtExceptionHandler) {
+			this.uncaughtExceptionHandler = uncaughtExceptionHandler;
 
-			this.clusterBuilder = new Cluster.Builder();
+			this.clusterBuilder = new Cluster.Builder(uncaughtExceptionHandler);
 
 			this.graphQLEngineBuilder = new GraphQLEngine.Builder()
 					.withFieldConfigurationBuilder(new TypeGraphQLFieldConfigurationBuilderImpl())
@@ -138,16 +141,6 @@ public class Platform implements AutoCloseable {
 
 		public Builder withConfig(DatabaseConfigure databaseConfigure) {
 			this.databaseConfigure = databaseConfigure;
-			return this;
-		}
-
-		public Builder withClusterBuilder(Cluster.Builder clusterBuilder) {
-			this.clusterBuilder = clusterBuilder;
-			return this;
-		}
-
-		public Builder withUncaughtExceptionHandler(Thread.UncaughtExceptionHandler uncaughtExceptionHandler) {
-			this.uncaughtExceptionHandler = uncaughtExceptionHandler;
 			return this;
 		}
 

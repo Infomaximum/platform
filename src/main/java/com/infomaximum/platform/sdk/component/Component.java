@@ -1,7 +1,7 @@
 package com.infomaximum.platform.sdk.component;
 
 import com.infomaximum.cluster.Cluster;
-import com.infomaximum.cluster.core.service.transport.executor.ExecutorTransportImpl;
+import com.infomaximum.cluster.core.service.transport.executor.ComponentExecutorTransportImpl;
 import com.infomaximum.cluster.exception.ClusterException;
 import com.infomaximum.cluster.graphql.remote.graphql.executor.RControllerGraphQLExecutorImpl;
 import com.infomaximum.database.anotation.Entity;
@@ -60,7 +60,7 @@ public abstract class Component extends com.infomaximum.cluster.struct.Component
     }
 
     @Override
-    protected ExecutorTransportImpl.Builder getExecutorTransportBuilder() {
+    protected ComponentExecutorTransportImpl.Builder getExecutorTransportBuilder() {
         ClusterContext clusterContext = cluster.getContext();
         this.rControllerGraphQLExecutor = clusterContext.platform.getGraphQLEngine().buildRemoteControllerGraphQLExecutor(this);//Обработчик GraphQL запросов
         return super.getExecutorTransportBuilder()
