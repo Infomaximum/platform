@@ -10,7 +10,7 @@ if (project.hasProperty('ossrhUsername')) {
 }
 
 group 'com.infomaximum'
-version '0.1.15p18.1'
+version '0.1.15p18.2'
 
 ext.moduleName = 'com.infomaximum.platform'
 
@@ -60,7 +60,7 @@ dependencies {
     api 'com.infomaximum:cluster:1.1.8p8'
 //    api project(':cluster')
 
-    api 'com.infomaximum:cluster-graphql:1.1.9p7'
+    api 'com.infomaximum:cluster-graphql:1.1.9p8'
 //    api project(':cluster-graphql')
     //Разобраться! Транзитивная зависимость,
     implementation('com.graphql-java:graphql-java:19.8') {
