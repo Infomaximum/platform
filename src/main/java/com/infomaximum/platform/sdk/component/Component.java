@@ -16,10 +16,10 @@ import com.infomaximum.platform.exception.PlatformException;
 import com.infomaximum.platform.sdk.dbprovider.ComponentDBProvider;
 import com.infomaximum.platform.sdk.exception.GeneralExceptionBuilder;
 import com.infomaximum.platform.sdk.remote.QueryRemotes;
+import com.infomaximum.platform.sdk.remote.node.UpdateNodeConnectService;
 import com.infomaximum.platform.sdk.struct.ClusterContext;
 import com.infomaximum.platform.sdk.struct.querypool.QuerySystem;
 import com.infomaximum.platform.sdk.subscription.GraphQLSubscribeEvent;
-import com.infomaximum.platform.service.UpdateNodeConnectService;
 import org.reflections.Reflections;
 
 import java.util.HashSet;

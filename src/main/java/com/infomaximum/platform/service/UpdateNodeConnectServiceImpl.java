@@ -3,15 +3,16 @@ package com.infomaximum.platform.service;
 import com.infomaximum.cluster.Node;
 import com.infomaximum.cluster.event.CauseNodeDisconnect;
 import com.infomaximum.cluster.event.UpdateNodeConnect;
+import com.infomaximum.platform.sdk.remote.node.UpdateNodeConnectService;
 
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-public class UpdateNodeConnectService implements UpdateNodeConnect {
+public class UpdateNodeConnectServiceImpl implements UpdateNodeConnect, UpdateNodeConnectService {
 
     private final List<UpdateNodeConnect> updateNodeListeners;
 
-    public UpdateNodeConnectService() {
+    public UpdateNodeConnectServiceImpl() {
         updateNodeListeners = new CopyOnWriteArrayList<>();
     }
 
@@ -25,10 +26,12 @@ public class UpdateNodeConnectService implements UpdateNodeConnect {
         updateNodeListeners.forEach(updateNodeConnect -> updateNodeConnect.onDisconnect(node, cause));
     }
 
+    @Override
     public void addListener(UpdateNodeConnect updateNodeListener) {
         updateNodeListeners.add(updateNodeListener);
     }
 
+    @Override
     public boolean removeListener(UpdateNodeConnect updateNodeListener) {
         return updateNodeListeners.remove(updateNodeListener);
     }

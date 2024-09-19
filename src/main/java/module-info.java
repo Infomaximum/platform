@@ -25,6 +25,7 @@ module com.infomaximum.platform {
     exports com.infomaximum.platform.sdk.component;
     exports com.infomaximum.platform.sdk.component.version;
     exports com.infomaximum.platform.sdk.remote.packer;
+    exports com.infomaximum.platform.sdk.remote.node;
     exports com.infomaximum.platform.sdk.threadpool;
     exports com.infomaximum.platform.update.core;
     exports com.infomaximum.platform.sdk.graphql.customfield.graphqlquery;
@@ -84,5 +85,4 @@ module com.infomaximum.platform {
     exports com.infomaximum.platform.sdk.dbprovider.remote to com.infomaximum.cluster;
     exports com.infomaximum.platform.prometheus;
     exports com.infomaximum.platform.prometheus.metric;
-    exports com.infomaximum.platform.service;
 }
