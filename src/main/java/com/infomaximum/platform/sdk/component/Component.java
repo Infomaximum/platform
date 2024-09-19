@@ -1,7 +1,6 @@
 package com.infomaximum.platform.sdk.component;
 
 import com.infomaximum.cluster.core.service.transport.executor.ComponentExecutorTransportImpl;
-import com.infomaximum.cluster.exception.ClusterException;
 import com.infomaximum.cluster.graphql.remote.graphql.executor.RControllerGraphQLExecutorImpl;
 import com.infomaximum.database.anotation.Entity;
 import com.infomaximum.database.domainobject.DomainObjectSource;
@@ -12,6 +11,7 @@ import com.infomaximum.database.maintenance.SchemaService;
 import com.infomaximum.database.provider.DBProvider;
 import com.infomaximum.database.schema.Schema;
 import com.infomaximum.database.schema.StructEntity;
+import com.infomaximum.platform.Platform;
 import com.infomaximum.platform.exception.PlatformException;
 import com.infomaximum.platform.sdk.dbprovider.ComponentDBProvider;
 import com.infomaximum.platform.sdk.exception.GeneralExceptionBuilder;
@@ -19,6 +19,7 @@ import com.infomaximum.platform.sdk.remote.QueryRemotes;
 import com.infomaximum.platform.sdk.struct.ClusterContext;
 import com.infomaximum.platform.sdk.struct.querypool.QuerySystem;
 import com.infomaximum.platform.sdk.subscription.GraphQLSubscribeEvent;
+import com.infomaximum.platform.service.UpdateNodeConnectService;
 import org.reflections.Reflections;
 
 import java.util.HashSet;
@@ -68,6 +69,10 @@ public abstract class Component extends com.infomaximum.cluster.struct.Component
 
     public ComponentType getType() {
         return null;
+    }
+
+    public UpdateNodeConnectService getNodeConnectService() {
+        return Platform.get().getNodeConnectService();
     }
 
     public QuerySystem<Void> onInstall() {

@@ -15,6 +15,7 @@ import com.infomaximum.platform.sdk.graphql.fieldconfiguration.TypeGraphQLFieldC
 import com.infomaximum.platform.sdk.graphql.scalartype.GraphQLScalarTypePlatform;
 import com.infomaximum.platform.sdk.struct.ClusterContext;
 import com.infomaximum.platform.service.LogUpdateNodeConnect;
+import com.infomaximum.platform.service.UpdateNodeConnectService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,17 +33,21 @@ public class Platform implements AutoCloseable {
     private final GraphQLEngine graphQLEngine;
     private final Cluster cluster;
     private final QueryPool queryPool;
+    private final UpdateNodeConnectService updateNodeConnectService;
 
     private Platform(Builder builder) {
         synchronized (Platform.class) {
             if (instant != null) throw new IllegalStateException();
+
+            this.updateNodeConnectService = new UpdateNodeConnectService();
+            this.updateNodeConnectService.addListener(new LogUpdateNodeConnect());
 
             this.uncaughtExceptionHandler = builder.uncaughtExceptionHandler;
             this.graphQLEngine = builder.graphQLEngineBuilder.build();
             this.cluster = builder.clusterBuilder
                     .withContext(new ClusterContext(this, builder.clusterContext))
                     .withExceptionBuilder(new ClusterExceptionBuilder())
-                    .withListenerUpdateConnect(new LogUpdateNodeConnect())
+                    .withListenerUpdateConnect(updateNodeConnectService)
                     .build();
             this.queryPool = new QueryPool(builder.uncaughtExceptionHandler);
 
@@ -84,6 +89,10 @@ public class Platform implements AutoCloseable {
 
     public QueryPool getQueryPool() {
         return queryPool;
+    }
+
+    public UpdateNodeConnectService getNodeConnectService() {
+        return updateNodeConnectService;
     }
 
     @Override

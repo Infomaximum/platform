@@ -84,4 +84,5 @@ module com.infomaximum.platform {
     exports com.infomaximum.platform.sdk.dbprovider.remote to com.infomaximum.cluster;
     exports com.infomaximum.platform.prometheus;
     exports com.infomaximum.platform.prometheus.metric;
+    exports com.infomaximum.platform.service;
 }
