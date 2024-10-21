@@ -100,11 +100,12 @@ public class FrontendEngine implements AutoCloseable {
     }
 
     public ComponentExecutorTransportImpl.Builder registerControllers(ComponentExecutorTransportImpl.Builder builder) {
-        return builder
-                .withRemoteController(
-                        platform.getGraphQLEngine().buildRemoteControllerGraphQLSubscribe(component, graphQLSubscribeEngine)
-                )
-                .withRemoteController(
+        if (!isGraphQLDisabled) {
+            builder.withRemoteController(
+                    platform.getGraphQLEngine().buildRemoteControllerGraphQLSubscribe(component, graphQLSubscribeEngine)
+            );
+        }
+        return builder.withRemoteController(
                         new RControllerClusterFileImpl.Builder(component, frontendMiltipartSource).build()//Обработчик ClusterFiles
                 );
     }
