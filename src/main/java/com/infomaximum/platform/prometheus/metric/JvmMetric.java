@@ -1,5 +1,6 @@
 package com.infomaximum.platform.prometheus.metric;
 
+import com.infomaximum.platform.prometheus.metric.base.PrometheusMetric;
 import io.prometheus.metrics.instrumentation.jvm.JvmMetrics;
 
 public class JvmMetric implements PrometheusMetric {

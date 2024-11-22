@@ -1,4 +1,4 @@
-package com.infomaximum.platform.prometheus.metric;
+package com.infomaximum.platform.prometheus.metric.base;
 
 import io.prometheus.metrics.core.metrics.Gauge;
 import io.prometheus.metrics.model.registry.PrometheusRegistry;
@@ -94,25 +94,25 @@ public class GaugeMetric implements PrometheusMetric {
         }
 
         @Override
-        public PrometheusMetric.Builder withName(String name) {
+        public Builder withName(String name) {
             builder.name(name);
             return this;
         }
 
         @Override
-        public PrometheusMetric.Builder withHelp(String help) {
+        public Builder withHelp(String help) {
             builder.help(help);
             return this;
         }
 
         @Override
-        public PrometheusMetric.Builder withLabels(String... labelNames) {
+        public Builder withLabels(String... labelNames) {
             builder.labelNames(labelNames);
             return this;
         }
 
         @Override
-        public PrometheusMetric.Builder withUnit(Unit unit) {
+        public Builder withUnit(Unit unit) {
             builder.unit(unit.getUnit());
             return this;
         }

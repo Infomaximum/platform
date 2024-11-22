@@ -1,4 +1,4 @@
-package com.infomaximum.platform.prometheus.metric;
+package com.infomaximum.platform.prometheus.metric.base;
 
 public interface PrometheusMetric {
 

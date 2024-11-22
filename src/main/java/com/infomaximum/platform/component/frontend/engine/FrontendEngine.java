@@ -85,6 +85,11 @@ public class FrontendEngine implements AutoCloseable {
 
                 httpBuilderTransport.addListener(((StatisticServiceImpl) statisticService).getListener());
                 httpBuilderTransport.addListener(requestCompleteCallbackService);
+                // Регистрируем обработчик http запросов для метрик Prometheus
+                if (builder.prometheusMetricRegistry != null &&
+                        builder.prometheusMetricRegistry.getHttpRequestListener() != null) {
+                    httpBuilderTransport.addListener(builder.prometheusMetricRegistry.getHttpRequestListener());
+                }
             } else {
                 throw new RuntimeException("Not support builder transport: " + builderTransport);
             }

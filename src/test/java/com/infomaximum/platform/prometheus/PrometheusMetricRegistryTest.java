@@ -1,9 +1,8 @@
 package com.infomaximum.platform.prometheus;
 
-import com.infomaximum.platform.prometheus.metric.CounterMetric;
-import com.infomaximum.platform.prometheus.metric.GaugeMetric;
-import com.infomaximum.platform.prometheus.metric.HistogramMetric;
-import com.infomaximum.platform.prometheus.metric.PrometheusMetric;
+import com.infomaximum.platform.prometheus.metric.base.CounterMetric;
+import com.infomaximum.platform.prometheus.metric.base.GaugeMetric;
+import com.infomaximum.platform.prometheus.metric.base.HistogramMetric;
 import io.prometheus.metrics.model.registry.PrometheusRegistry;
 import io.prometheus.metrics.model.snapshots.*;
 import org.junit.jupiter.api.*;
@@ -17,21 +16,21 @@ public class PrometheusMetricRegistryTest {
 
     private static final String LABEL_NAME = "test_label";
 
-    private static final CounterMetric COUNTER_METRIC = (CounterMetric) CounterMetric.builder()
+    private static final CounterMetric COUNTER_METRIC = CounterMetric.builder()
             .withName("counter_test_total")
             .withLabels(LABEL_NAME)
             .build();
 
-    private static final GaugeMetric GAUGE_METRIC = (GaugeMetric) GaugeMetric.builder()
+    private static final GaugeMetric GAUGE_METRIC = GaugeMetric.builder()
             .withName("gauge_test_bytes")
             .withHelp("Test gauge metric")
             .withLabels(LABEL_NAME)
-            .withUnit(PrometheusMetric.Unit.BYTES)
+            .withUnit(com.infomaximum.platform.prometheus.metric.base.PrometheusMetric.Unit.BYTES)
             .build();
 
-    private static final HistogramMetric HISTOGRAM_METRIC = (HistogramMetric) HistogramMetric.builder()
+    private static final HistogramMetric HISTOGRAM_METRIC = HistogramMetric.builder()
             .withName("histogram_test_seconds")
-            .withUnit(PrometheusMetric.Unit.SECONDS)
+            .withUnit(com.infomaximum.platform.prometheus.metric.base.PrometheusMetric.Unit.SECONDS)
             .withLabels(LABEL_NAME)
             .build();
 
