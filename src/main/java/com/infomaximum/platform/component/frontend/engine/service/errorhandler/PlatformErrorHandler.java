@@ -6,7 +6,7 @@ import org.eclipse.jetty.io.EofException;
 import org.eclipse.jetty.ee10.servlet.Dispatcher;
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.Response;
-import org.eclipse.jetty.server.handler.ErrorHandler;
+import com.infomaximum.network.struct.ErrorHandler;
 import org.eclipse.jetty.util.Callback;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,7 +19,7 @@ import org.springframework.web.util.NestedServletException;
 import java.nio.ByteBuffer;
 import java.util.List;
 
-public class PlatformErrorHandler extends ErrorHandler {
+public class PlatformErrorHandler implements ErrorHandler {
 
     private final static Logger log = LoggerFactory.getLogger(PlatformErrorHandler.class);
 
@@ -35,7 +35,7 @@ public class PlatformErrorHandler extends ErrorHandler {
     }
 
     @Override
-    public boolean handle(Request request, Response response, Callback callback) {
+    public void handle(Request request, Response response, Throwable throwable) {
         try {
             if (response.getStatus() == HttpStatus.NOT_FOUND.value()) {
                 actionErrorHandler.handlerNotFound(response);
@@ -54,7 +54,6 @@ public class PlatformErrorHandler extends ErrorHandler {
             } else if (response.getStatus() >= 400 && response.getStatus() < 500) {
                 //Ошибки построения запроса клиентом - игнорируем и прокидываем ответ напрямую
             } else {
-                Throwable throwable = (Throwable) request.getAttribute(Dispatcher.ERROR_EXCEPTION);
                 if (throwable == null) {
                     throw new RuntimeException("Unknown state errorHandler, response status:" + response.getStatus() + ", " + response);
                 } else {
@@ -64,8 +63,6 @@ public class PlatformErrorHandler extends ErrorHandler {
         } catch (Throwable ex) {
             processingException(ex, request, response);
         }
-        callback.succeeded();//Крайне важный вызов, без него соединение keep-alive зависнет и все последующие запросы от браузера в рамках этого соединения также зависнут
-        return true;
     }
 
     private void processingException(Throwable ex, Request request, Response response) {
