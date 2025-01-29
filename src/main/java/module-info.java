@@ -29,6 +29,7 @@ module com.infomaximum.platform {
     exports com.infomaximum.platform.sdk.component.version;
     exports com.infomaximum.platform.sdk.remote.packer;
     exports com.infomaximum.platform.sdk.remote.node;
+    exports com.infomaximum.platform.sdk.remote.component;
     exports com.infomaximum.platform.sdk.threadpool;
     exports com.infomaximum.platform.update.core;
     exports com.infomaximum.platform.sdk.graphql.customfield.graphqlquery;

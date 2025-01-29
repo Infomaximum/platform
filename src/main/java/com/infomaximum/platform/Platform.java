@@ -13,8 +13,10 @@ import com.infomaximum.platform.sdk.graphql.datafetcher.PlatformDataFetcher;
 import com.infomaximum.platform.sdk.graphql.datafetcher.PlatformDataFetcherExceptionHandler;
 import com.infomaximum.platform.sdk.graphql.fieldconfiguration.TypeGraphQLFieldConfigurationBuilderImpl;
 import com.infomaximum.platform.sdk.graphql.scalartype.GraphQLScalarTypePlatform;
+import com.infomaximum.platform.sdk.remote.component.ComponentEventListenerService;
 import com.infomaximum.platform.sdk.remote.node.UpdateNodeConnectService;
 import com.infomaximum.platform.sdk.struct.ClusterContext;
+import com.infomaximum.platform.service.ComponentEventListenerServiceImpl;
 import com.infomaximum.platform.service.LogUpdateNodeConnect;
 import com.infomaximum.platform.service.UpdateNodeConnectServiceImpl;
 import org.slf4j.Logger;
@@ -35,11 +37,13 @@ public class Platform implements AutoCloseable {
     private final Cluster cluster;
     private final QueryPool queryPool;
     private final UpdateNodeConnectServiceImpl updateNodeConnectService;
+    private final ComponentEventListenerServiceImpl componentEventListenerService;
 
     private Platform(Builder builder) {
         synchronized (Platform.class) {
             if (instant != null) throw new IllegalStateException();
 
+            this.componentEventListenerService = new ComponentEventListenerServiceImpl();
             this.updateNodeConnectService = new UpdateNodeConnectServiceImpl();
             this.updateNodeConnectService.addListener(new LogUpdateNodeConnect());
 
@@ -57,23 +61,23 @@ public class Platform implements AutoCloseable {
     }
 
     public void install() throws PlatformException {
-        new PlatformUpgrade(this).install();
+        new PlatformUpgrade(this, componentEventListenerService).install();
     }
 
     public void upgrade() throws Exception {
-        new PlatformUpgrade(this).upgrade();
+        new PlatformUpgrade(this, componentEventListenerService).upgrade();
     }
 
     public void checkBeforeUpgrade() throws Exception {
-        new PlatformUpgrade(this).checkBeforeUpgrade();
+        new PlatformUpgrade(this, componentEventListenerService).checkBeforeUpgrade();
     }
 
     public void start() throws PlatformException {
-        new PlatformStartStop(this).start(false);
+        new PlatformStartStop(this, componentEventListenerService).start(false);
     }
 
     public void stop() throws PlatformException {
-        new PlatformStartStop(this).stop(false);
+        new PlatformStartStop(this, componentEventListenerService).stop(false);
     }
 
     public Thread.UncaughtExceptionHandler getUncaughtExceptionHandler() {
@@ -94,6 +98,10 @@ public class Platform implements AutoCloseable {
 
     public UpdateNodeConnectService getNodeConnectService() {
         return updateNodeConnectService;
+    }
+
+    public ComponentEventListenerService getComponentEventListenerService() {
+        return componentEventListenerService;
     }
 
     @Override

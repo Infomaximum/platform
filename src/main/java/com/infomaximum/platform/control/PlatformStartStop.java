@@ -1,5 +1,6 @@
 package com.infomaximum.platform.control;
 
+import com.infomaximum.cluster.Node;
 import com.infomaximum.database.exception.DatabaseException;
 import com.infomaximum.database.schema.Schema;
 import com.infomaximum.platform.Platform;
@@ -9,6 +10,8 @@ import com.infomaximum.platform.querypool.Query;
 import com.infomaximum.platform.querypool.QueryTransaction;
 import com.infomaximum.platform.querypool.ResourceProvider;
 import com.infomaximum.platform.sdk.component.Component;
+import com.infomaximum.platform.sdk.component.ComponentEventListener;
+import com.infomaximum.platform.sdk.component.ComponentInfo;
 import com.infomaximum.platform.sdk.component.ComponentType;
 import com.infomaximum.platform.sdk.context.ContextTransaction;
 import com.infomaximum.platform.sdk.context.impl.ContextTransactionImpl;
@@ -31,8 +34,11 @@ public class PlatformStartStop {
 
     private final Platform platform;
 
-    public PlatformStartStop(Platform platform) {
+    private final ComponentEventListener componentEventListener;
+
+    public PlatformStartStop(Platform platform, ComponentEventListener componentEventListener) {
         this.platform = platform;
+        this.componentEventListener = componentEventListener;
     }
 
     /**
@@ -62,7 +68,7 @@ public class PlatformStartStop {
 
         //onStart
         DatabaseComponent databaseComponent = platform.getCluster().getAnyLocalComponent(DatabaseComponent.class);
-        List<QuerySystem<Void>> startQueries = platform.getCluster().getDependencyOrderedComponentsOf(Component.class)
+        List<ComponentQuery> startQueries = platform.getCluster().getDependencyOrderedComponentsOf(Component.class)
                 .stream()
                 .sorted((o1, o2) -> {//Необходимо, что бы фронт запустился самым последним
                     if (o1.getType() == ComponentType.FRONTEND) {
@@ -73,24 +79,30 @@ public class PlatformStartStop {
                         return 0;
                     }
                 })
-                .map(component -> component.onStart())
-                .filter(query -> query != null)
+                .map(component -> new ComponentQuery(component.getInfo().getUuid(), component.onStart()))
                 .collect(Collectors.toList());
+        Node node = platform.getCluster().node;
         try {
             platform.getQueryPool().execute(databaseComponent, new Query<Void>() {
 
                 @Override
                 public void prepare(ResourceProvider resources) throws PlatformException {
-                    for (QuerySystem<Void> query : startQueries) {
-                        query.prepare(resources);
+                    for (ComponentQuery componentQuery : startQueries) {
+                        if (componentQuery.querySystem != null) {
+                            componentQuery.querySystem.prepare(resources);
+                        }
                     }
                 }
 
                 @Override
                 public Void execute(QueryTransaction transaction) throws PlatformException {
                     ContextTransaction contextTransaction = new ContextTransactionImpl(new SourceSystemImpl(), transaction);
-                    for (QuerySystem<Void> query : startQueries) {
-                        query.execute(contextTransaction);
+                    for (ComponentQuery componentQuery : startQueries) {
+                        componentEventListener.onBeforeStart(node, new ComponentInfo(componentQuery.componentUuid));
+                        if (componentQuery.querySystem != null) {
+                            componentQuery.querySystem.execute(contextTransaction);
+                        }
+                        componentEventListener.onAfterStart(node, new ComponentInfo(componentQuery.componentUuid));
                     }
                     return null;
                 }
@@ -105,6 +117,7 @@ public class PlatformStartStop {
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
+        componentEventListener.onAllStart(node);
     }
 
     public void initialize() throws PlatformException {
@@ -147,26 +160,32 @@ public class PlatformStartStop {
                 return 0;
             }
         });
-        List<QuerySystem<Void>> stopQueries = reverseDependencyOrderedComponents
+        List<ComponentQuery> stopQueries = reverseDependencyOrderedComponents
                 .stream()
-                .map(component -> component.onStop())
-                .filter(query -> query != null)
+                .map(component -> new ComponentQuery(component.getInfo().getUuid(), component.onStop()))
                 .collect(Collectors.toList());
+        Node node = platform.getCluster().node;
         try {
             DatabaseComponent databaseComponent = platform.getCluster().getAnyLocalComponent(DatabaseComponent.class);
             platform.getQueryPool().execute(databaseComponent, new Query<Void>() {
                 @Override
                 public void prepare(ResourceProvider resources) throws PlatformException {
-                    for (QuerySystem<Void> query : stopQueries) {
-                        query.prepare(resources);
+                    for (ComponentQuery componentQuery : stopQueries) {
+                        if (componentQuery.querySystem != null) {
+                            componentQuery.querySystem.prepare(resources);
+                        }
                     }
                 }
 
                 @Override
                 public Void execute(QueryTransaction transaction) throws PlatformException {
                     ContextTransaction contextTransaction = new ContextTransactionImpl(new SourceSystemImpl(), transaction);
-                    for (QuerySystem<Void> query : stopQueries) {
-                        query.execute(contextTransaction);
+                    for (ComponentQuery componentQuery : stopQueries) {
+                        componentEventListener.onBeforeStop(node, new ComponentInfo(componentQuery.componentUuid));
+                        if (componentQuery.querySystem != null) {
+                            componentQuery.querySystem.execute(contextTransaction);
+                        }
+                        componentEventListener.onAfterStop(node, new ComponentInfo(componentQuery.componentUuid));
                     }
                     return null;
                 }
@@ -181,5 +200,8 @@ public class PlatformStartStop {
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
+        componentEventListener.onAllStop(node);
     }
+
+    private record ComponentQuery(String componentUuid, QuerySystem<Void> querySystem){}
 }
