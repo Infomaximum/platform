@@ -138,6 +138,12 @@ public class PlatformErrorHandler implements ErrorHandler {
         ) {
             //Request processing failed: org.springframework.web.multipart.MultipartException: Failed to parse multipart servlet request
             return;
+        } else if (chainThrowables.size() == 1
+                && chainThrowables.get(0) instanceof org.eclipse.jetty.http.HttpException httpException
+                && httpException.getCode() == 505
+        ) {
+            //Unsupported HTTP version: org.eclipse.jetty.http.HttpException$RuntimeException: 505: HTTP/0.9 not supported
+            return;
         }
 
         String msgException = "Request: " + request.toString() + ", response.status: " + response.getStatus();
