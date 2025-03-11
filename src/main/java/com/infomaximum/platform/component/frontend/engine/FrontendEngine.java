@@ -102,6 +102,7 @@ public class FrontendEngine implements AutoCloseable {
 
         this.controllers = new Controllers(this);
         this.isGraphQLDisabled = builder.isGraphQLDisabled;
+        graphQLEngine.setIntrospectionDisabled(builder.isGraphQlIntrospectionDisabled);
     }
 
     public ComponentExecutorTransportImpl.Builder registerControllers(ComponentExecutorTransportImpl.Builder builder) {
@@ -185,6 +186,7 @@ public class FrontendEngine implements AutoCloseable {
         private StatisticService statisticService = new StatisticServiceImpl();
 
         private boolean isGraphQLDisabled = false;
+        private boolean isGraphQlIntrospectionDisabled = true;
 
         public Builder(Platform platform, Component component) {
             this.platform = platform;
@@ -223,6 +225,11 @@ public class FrontendEngine implements AutoCloseable {
 
         public Builder withGraphQLDisabled(boolean isGraphQLDisabled) {
             this.isGraphQLDisabled = isGraphQLDisabled;
+            return this;
+        }
+
+        public Builder withGraphQLIntrospectionDisabled(boolean isGraphQLIntrospectionDisabled) {
+            this.isGraphQlIntrospectionDisabled = isGraphQLIntrospectionDisabled;
             return this;
         }
 

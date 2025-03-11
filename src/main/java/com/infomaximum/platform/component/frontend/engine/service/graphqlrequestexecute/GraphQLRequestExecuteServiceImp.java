@@ -25,6 +25,7 @@ import com.infomaximum.platform.sdk.exception.GeneralExceptionBuilder;
 import com.infomaximum.platform.utils.ExceptionUtils;
 import graphql.*;
 import graphql.execution.ExecutionId;
+import graphql.introspection.Introspection;
 import net.minidev.json.JSONArray;
 import net.minidev.json.JSONObject;
 import org.slf4j.Logger;
@@ -98,6 +99,10 @@ public class GraphQLRequestExecuteServiceImp implements GraphQLRequestExecuteSer
             );
             return CompletableFuture.completedFuture(buildResponse(graphQLSubsystemException));
         }
+        GraphQLExecutorPrepareImpl.PrepareDocumentRequest prepareDocumentRequest = prepareGraphQLDocument.getPrepareDocumentRequest();
+        prepareDocumentRequest.executionInput
+                .getGraphQLContext()
+                .put(Introspection.INTROSPECTION_DISABLED, graphQLEngine.isIntrospectionDisabled());
 
         //Выполняем graphql запрос
         if (prepareGraphQLDocument.isQueryPoolRequest()) {
@@ -134,7 +139,7 @@ public class GraphQLRequestExecuteServiceImp implements GraphQLRequestExecuteSer
 
                             Instant instantAuthorize = Instant.now();
 
-                            GExecutionResult executionResult = graphQLExecutorPrepare.execute(prepareGraphQLDocument.getPrepareDocumentRequest());
+                            GExecutionResult executionResult = graphQLExecutorPrepare.execute(prepareDocumentRequest);
 
                             GExecutionStatistics statistics = new GExecutionStatistics(
                                     authContext,
@@ -167,7 +172,7 @@ public class GraphQLRequestExecuteServiceImp implements GraphQLRequestExecuteSer
             try {
                 Instant instantStartExecute = Instant.now();
 
-                GExecutionResult executionResult = graphQLExecutorPrepare.execute(prepareGraphQLDocument.getPrepareDocumentRequest());
+                GExecutionResult executionResult = graphQLExecutorPrepare.execute(prepareDocumentRequest);
 
                 GExecutionStatistics statistics = new GExecutionStatistics(
                         new UnauthorizedContext(),
@@ -262,6 +267,8 @@ public class GraphQLRequestExecuteServiceImp implements GraphQLRequestExecuteSer
             platformException = GeneralExceptionBuilder.buildGraphQLInvalidSyntaxException();
         } else if (errorType == ErrorType.ValidationError) {
             platformException = GeneralExceptionBuilder.buildGraphQLValidationException();
+        } else if (errorType.toSpecification(graphQLError).equals("IntrospectionDisabled")) {
+            platformException = GeneralExceptionBuilder.buildGraphQLIntrospectionDisabledException();
         } else if (errorType == ErrorType.DataFetchingException) {
             ExceptionWhileDataFetching exceptionWhileDataFetching = (ExceptionWhileDataFetching) graphQLError;
             Throwable dataFetchingThrowable = exceptionWhileDataFetching.getException();

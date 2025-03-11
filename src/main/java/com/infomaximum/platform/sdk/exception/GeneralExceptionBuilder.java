@@ -105,6 +105,10 @@ public class GeneralExceptionBuilder {
         return EXCEPTION_FACTORY.build("graphql_validation_error", message);
     }
 
+    public static PlatformException buildGraphQLIntrospectionDisabledException() {
+        return EXCEPTION_FACTORY.build("graphql_introspection_disabled");
+    }
+
     public static PlatformException buildInvalidJsonException(Throwable cause) {
         return EXCEPTION_FACTORY.build("invalid_json", cause);
     }
