@@ -5,6 +5,7 @@ import com.infomaximum.database.exception.DatabaseException;
 import com.infomaximum.database.schema.Schema;
 import com.infomaximum.platform.Platform;
 import com.infomaximum.platform.component.database.DatabaseComponent;
+import com.infomaximum.platform.component.database.info.DBInfo;
 import com.infomaximum.platform.exception.PlatformException;
 import com.infomaximum.platform.querypool.Query;
 import com.infomaximum.platform.querypool.QueryTransaction;
@@ -19,6 +20,7 @@ import com.infomaximum.platform.sdk.context.source.impl.SourceSystemImpl;
 import com.infomaximum.platform.sdk.domainobject.module.ModuleReadable;
 import com.infomaximum.platform.sdk.exception.GeneralExceptionBuilder;
 import com.infomaximum.platform.sdk.struct.querypool.QuerySystem;
+import com.infomaximum.rocksdb.RocksDBProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -126,11 +128,15 @@ public class PlatformStartStop {
                 component.initialize();
             }
         }
+        DatabaseComponent databaseSubsystem = platform.getCluster().getAnyLocalComponent(DatabaseComponent.class);
+        RocksDBProvider rocksDBProvider = databaseSubsystem.getRocksDBProvider();
+
+        // Создаем объект info в service_column_family
+        DBInfo.createIfNotExists(rocksDBProvider);
 
         //Инициализируем ModuleReadable
         try {
-            DatabaseComponent databaseSubsystem = platform.getCluster().getAnyLocalComponent(DatabaseComponent.class);
-            Schema schema = Schema.read(databaseSubsystem.getRocksDBProvider());
+            Schema schema = Schema.read(rocksDBProvider);
             log.warn("Schema on start: " + schema.getDbSchema().toTablesJsonString());
             Schema.resolve(ModuleReadable.class);
         } catch (DatabaseException e) {

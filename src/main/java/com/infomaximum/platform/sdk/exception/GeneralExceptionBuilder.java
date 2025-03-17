@@ -90,7 +90,7 @@ public class GeneralExceptionBuilder {
     }
 
     public static PlatformException buildInvalidJsonException() {
-        return buildInvalidJsonException(null);
+        return EXCEPTION_FACTORY.build("invalid_json");
     }
 
     public static PlatformException buildGraphQLInvalidSyntaxException() {
@@ -111,6 +111,10 @@ public class GeneralExceptionBuilder {
 
     public static PlatformException buildInvalidJsonException(Throwable cause) {
         return EXCEPTION_FACTORY.build("invalid_json", cause);
+    }
+
+    public static PlatformException buildInvalidJsonException(String message) {
+        return EXCEPTION_FACTORY.build("invalid_json", message);
     }
 
     public static PlatformException buildIllegalStateException(String message) {

@@ -73,6 +73,7 @@ module com.infomaximum.platform {
     exports com.infomaximum.platform.component.frontend.engine.network.protocol.graphqltransportws.handler.handshake;
     exports com.infomaximum.platform.component.database.remote.backup;
     exports com.infomaximum.platform.component.database.remote.cfconfig;
+    exports com.infomaximum.platform.component.database.remote.info;
     exports com.infomaximum.platform.component.database.remote.dbprovider to com.infomaximum.cluster;
     exports com.infomaximum.platform.sdk.context.source;
     exports com.infomaximum.platform.sdk.context.source.impl;
