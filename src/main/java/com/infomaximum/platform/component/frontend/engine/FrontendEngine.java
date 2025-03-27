@@ -9,6 +9,7 @@ import com.infomaximum.network.builder.BuilderNetwork;
 import com.infomaximum.network.builder.BuilderTransport;
 import com.infomaximum.network.exception.NetworkException;
 import com.infomaximum.network.transport.http.builder.HttpBuilderTransport;
+import com.infomaximum.network.transport.http.builder.filter.BuilderFilter;
 import com.infomaximum.platform.Platform;
 import com.infomaximum.platform.component.frontend.engine.authorize.RequestAuthorize;
 import com.infomaximum.platform.component.frontend.engine.controller.Controllers;
@@ -16,6 +17,7 @@ import com.infomaximum.platform.component.frontend.engine.filter.FilterGRequest;
 import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.GraphQLRequestExecuteServiceDisable;
 import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.GraphQLRequestExecuteService;
 import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.GraphQLRequestExecuteServiceImp;
+import com.infomaximum.platform.component.frontend.engine.filter.HttpHeadersFilter;
 import com.infomaximum.platform.component.frontend.engine.service.requestcomplete.RequestCompleteCallbackService;
 import com.infomaximum.platform.component.frontend.engine.service.statistic.StatisticService;
 import com.infomaximum.platform.component.frontend.engine.service.statistic.StatisticServiceImpl;
@@ -90,6 +92,8 @@ public class FrontendEngine implements AutoCloseable {
                         builder.prometheusMetricRegistry.getHttpRequestListener() != null) {
                     httpBuilderTransport.addListener(builder.prometheusMetricRegistry.getHttpRequestListener());
                 }
+                // Добавляем фильтр для заголовков
+                httpBuilderTransport.addFilter(new BuilderFilter(new HttpHeadersFilter(builder.headersFilterBuilder), "/*"));
             } else {
                 throw new RuntimeException("Not support builder transport: " + builderTransport);
             }
@@ -188,6 +192,8 @@ public class FrontendEngine implements AutoCloseable {
         private boolean isGraphQLDisabled = false;
         private boolean isGraphQlIntrospectionDisabled = true;
 
+        private HttpHeadersFilter.Builder headersFilterBuilder = new HttpHeadersFilter.Builder();
+
         public Builder(Platform platform, Component component) {
             this.platform = platform;
             this.component = component;
@@ -230,6 +236,11 @@ public class FrontendEngine implements AutoCloseable {
 
         public Builder withGraphQLIntrospectionDisabled(boolean isGraphQLIntrospectionDisabled) {
             this.isGraphQlIntrospectionDisabled = isGraphQLIntrospectionDisabled;
+            return this;
+        }
+
+        public Builder withHeadersFilterBuilder(HttpHeadersFilter.Builder headersFilterBuilder) {
+            this.headersFilterBuilder = headersFilterBuilder;
             return this;
         }
 
