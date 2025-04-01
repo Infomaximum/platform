@@ -234,6 +234,7 @@ public class GraphQLRequestExecuteServiceImp implements GraphQLRequestExecuteSer
         }
 
         error.put("code", e.getCode());
+        error.put("message", null);
 
         if (e.getParameters() != null && !e.getParameters().isEmpty()) {
             GraphQLSchemaType graphQLSchemaType = graphQLEngine.getGraphQLSchemaType();

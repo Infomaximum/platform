@@ -27,7 +27,7 @@ public class GraphQLRequestExecuteServiceDisable implements GraphQLRequestExecut
 
         JSONObject error = new JSONObject();
         error.put("code", e.getCode());
-        error.put("comment", e.getComment());
+        error.put("message", e.getComment());
 
         return new GraphQLResponse<>(error, true, graphQLPlatformException.getStatistics());
     }
