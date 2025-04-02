@@ -269,6 +269,8 @@ public class GraphQLRequestExecuteServiceImp implements GraphQLRequestExecuteSer
             platformException = GeneralExceptionBuilder.buildGraphQLValidationException();
         } else if (errorType.toSpecification(graphQLError).equals("IntrospectionDisabled")) {
             platformException = GeneralExceptionBuilder.buildGraphQLIntrospectionDisabledException();
+        } else if (errorType.toSpecification(graphQLError).equals("BadFaithIntrospection")) {
+            platformException = GeneralExceptionBuilder.buildGraphQLBadFaithIntrospectionException();
         } else if (errorType == ErrorType.DataFetchingException) {
             ExceptionWhileDataFetching exceptionWhileDataFetching = (ExceptionWhileDataFetching) graphQLError;
             Throwable dataFetchingThrowable = exceptionWhileDataFetching.getException();
