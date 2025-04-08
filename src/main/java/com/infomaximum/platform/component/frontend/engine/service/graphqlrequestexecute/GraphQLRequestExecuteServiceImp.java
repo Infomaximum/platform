@@ -16,6 +16,7 @@ import com.infomaximum.platform.component.frontend.engine.graphql.PrepareGraphQL
 import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.struct.GraphQLResponse;
 import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.utils.GraphQLExecutionResultUtils;
 import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.struct.GExecutionStatistics;
+import com.infomaximum.platform.component.frontend.engine.service.introspection.IntrospectionChecker;
 import com.infomaximum.platform.exception.GraphQLWrapperPlatformException;
 import com.infomaximum.platform.exception.PlatformException;
 import com.infomaximum.platform.exception.runtime.PlatformRuntimeException;
@@ -51,11 +52,13 @@ public class GraphQLRequestExecuteServiceImp implements GraphQLRequestExecuteSer
     private final GraphQLExecutorPrepareImpl graphQLExecutorPrepare;
     private final RequestAuthorize.Builder requestAuthorizeBuilder;
     private final Thread.UncaughtExceptionHandler uncaughtExceptionHandler;
+    private final IntrospectionChecker introspectionChecker;
 
     public GraphQLRequestExecuteServiceImp(
             Component frontendComponent, QueryPool queryPool,
             GraphQLEngine graphQLEngine, GraphQLSubscribeEngine graphQLSubscribeEngine,
             RequestAuthorize.Builder requestAuthorizeBuilder,
+            IntrospectionChecker introspectionChecker,
             Thread.UncaughtExceptionHandler uncaughtExceptionHandler
     ) {
         this.frontendComponent = frontendComponent;
@@ -64,6 +67,7 @@ public class GraphQLRequestExecuteServiceImp implements GraphQLRequestExecuteSer
         this.graphQLExecutorPrepare = (GraphQLExecutorPrepareImpl) graphQLEngine.buildExecutor(frontendComponent, graphQLSubscribeEngine);
         this.requestAuthorizeBuilder = requestAuthorizeBuilder;
         this.uncaughtExceptionHandler = uncaughtExceptionHandler;
+        this.introspectionChecker = introspectionChecker;
     }
 
     @Override
@@ -100,9 +104,6 @@ public class GraphQLRequestExecuteServiceImp implements GraphQLRequestExecuteSer
             return CompletableFuture.completedFuture(buildResponse(graphQLSubsystemException));
         }
         GraphQLExecutorPrepareImpl.PrepareDocumentRequest prepareDocumentRequest = prepareGraphQLDocument.getPrepareDocumentRequest();
-        prepareDocumentRequest.executionInput
-                .getGraphQLContext()
-                .put(Introspection.INTROSPECTION_DISABLED, graphQLEngine.isIntrospectionDisabled());
 
         //Выполняем graphql запрос
         if (prepareGraphQLDocument.isQueryPoolRequest()) {
@@ -136,6 +137,11 @@ public class GraphQLRequestExecuteServiceImp implements GraphQLRequestExecuteSer
 
                             UnauthorizedContext authContext = requestAuthorize.authorize(context);
                             source.setAuthContext(authContext);
+
+                            prepareDocumentRequest.executionInput
+                                    .getGraphQLContext()
+                                    .put(Introspection.INTROSPECTION_DISABLED,
+                                            graphQLEngine.isIntrospectionDisabled() || !introspectionChecker.isAllowIntrospection(context));
 
                             Instant instantAuthorize = Instant.now();
 
@@ -171,6 +177,10 @@ public class GraphQLRequestExecuteServiceImp implements GraphQLRequestExecuteSer
         } else {
             try {
                 Instant instantStartExecute = Instant.now();
+
+                prepareDocumentRequest.executionInput
+                        .getGraphQLContext()
+                        .put(Introspection.INTROSPECTION_DISABLED, graphQLEngine.isIntrospectionDisabled());
 
                 GExecutionResult executionResult = graphQLExecutorPrepare.execute(prepareDocumentRequest);
 

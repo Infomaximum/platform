@@ -18,6 +18,7 @@ import com.infomaximum.platform.component.frontend.engine.service.graphqlrequest
 import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.GraphQLRequestExecuteService;
 import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.GraphQLRequestExecuteServiceImp;
 import com.infomaximum.platform.component.frontend.engine.filter.HttpHeadersFilter;
+import com.infomaximum.platform.component.frontend.engine.service.introspection.IntrospectionChecker;
 import com.infomaximum.platform.component.frontend.engine.service.requestcomplete.RequestCompleteCallbackService;
 import com.infomaximum.platform.component.frontend.engine.service.statistic.StatisticService;
 import com.infomaximum.platform.component.frontend.engine.service.statistic.StatisticServiceImpl;
@@ -57,6 +58,7 @@ public class FrontendEngine implements AutoCloseable {
 
     private final Controllers controllers;
     private final boolean isGraphQLDisabled;
+    private final IntrospectionChecker introspectionChecker;
 
     private FrontendEngine(Builder builder) {
         this.builder = builder;
@@ -79,6 +81,7 @@ public class FrontendEngine implements AutoCloseable {
         this.requestCompleteCallbackService = new RequestCompleteCallbackService(
                 builder.builderNetwork.getUncaughtExceptionHandler()
         );
+        this.introspectionChecker = builder.introspectionChecker;
 
         //Регистрируем подписчиков
         for (BuilderTransport builderTransport: builder.builderNetwork.getBuilderTransports()) {
@@ -128,6 +131,7 @@ public class FrontendEngine implements AutoCloseable {
                         platform.getQueryPool(),
                         graphQLEngine, graphQLSubscribeEngine,
                         requestAuthorizeBuilder,
+                        introspectionChecker,
                         platform.getUncaughtExceptionHandler()
                 );
 
@@ -192,6 +196,8 @@ public class FrontendEngine implements AutoCloseable {
         private boolean isGraphQLDisabled = false;
         private boolean isGraphQlIntrospectionDisabled = true;
 
+        private IntrospectionChecker introspectionChecker = IntrospectionChecker.getDefault();
+
         private HttpHeadersFilter.Builder headersFilterBuilder = new HttpHeadersFilter.Builder();
 
         public Builder(Platform platform, Component component) {
@@ -241,6 +247,11 @@ public class FrontendEngine implements AutoCloseable {
 
         public Builder withHeadersFilterBuilder(HttpHeadersFilter.Builder headersFilterBuilder) {
             this.headersFilterBuilder = headersFilterBuilder;
+            return this;
+        }
+
+        public Builder withIntrospectionChecker(IntrospectionChecker introspectionChecker) {
+            this.introspectionChecker = introspectionChecker;
             return this;
         }
 

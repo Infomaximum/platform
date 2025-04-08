@@ -60,7 +60,7 @@ dependencies {
     api 'com.infomaximum:cluster:1.1.11'
 //    api project(':cluster')
 
-    api 'com.infomaximum:cluster-graphql:1.1.14'
+    api 'com.infomaximum:cluster-graphql:1.1.15'
 //    api project(':cluster-graphql')
     //Разобраться! Транзитивная зависимость,
     implementation('com.graphql-java:graphql-java:19.11') {

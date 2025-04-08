@@ -27,13 +27,18 @@ public class PrepareGraphQLDocument {
                     new GraphQLExecutorPrepareImpl.PrepareFunction<HashMap<String, QueryPool.LockType>>() {
                         @Override
                         public void prepare(RGraphQLObjectTypeField rGraphQLObjectTypeField, HashMap<String, QueryPool.LockType> prepare) {
-                            if (prepare != null) {
+                            if ("__schema".equals(rGraphQLObjectTypeField.name) || "__type".equals(rGraphQLObjectTypeField.name)) {
+                                //Запросы интроспекции необходимо проводить через QueryPool, чтобы проверить IntrospectionChecker
+                                resultQueryPoolRequest[0] = true;
+                            } else if (prepare != null) {
+                                //Запросы, которые лочат ресурсы, необходимо проводить через QueryPool
                                 prepare.forEach((resource, lockType) -> {
                                     ResourceProviderImpl.appendResource(resource, lockType, waitLockResources);
                                 });
 
                                 resultQueryPoolRequest[0] = true;
                             } else if (!resultQueryPoolRequest[0]) {
+                                //Запросы, которые имеют не UnauthorizedContext, необходимо проводить через QueryPool
                                 FieldConfiguration fieldConfiguration = (FieldConfiguration) rGraphQLObjectTypeField.configuration;
                                 if (fieldConfiguration != null) {
                                     for (Class<? extends UnauthorizedContext> authorizedContext : fieldConfiguration.typeAuthContexts) {

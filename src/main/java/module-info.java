@@ -57,6 +57,7 @@ module com.infomaximum.platform {
     exports com.infomaximum.platform.component.frontend.engine.provider;
     exports com.infomaximum.platform.component.frontend.engine.service.errorhandler;
     exports com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute;
+    exports com.infomaximum.platform.component.frontend.engine.service.introspection;
     exports com.infomaximum.platform.component.frontend.request.graphql.builder.impl;
     exports com.infomaximum.platform.component.frontend.context.impl;
     exports com.infomaximum.platform.component.frontend.engine.authorize;
