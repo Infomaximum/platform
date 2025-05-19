@@ -30,6 +30,8 @@ public class MimeType implements RemoteObject {
 
     public static final MimeType RPM = new MimeType("application/x-rpm");
 
+    public static final MimeType CSV = new MimeType("text/csv");
+
 
     public final String value;
 

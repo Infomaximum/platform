@@ -21,6 +21,7 @@ public class MimeTypeUtils {
         mimeTypes.put("dmg", MimeType.DMG);
         mimeTypes.put("zip", MimeType.ZIP);
         mimeTypes.put("deb", MimeType.DEB);
+        mimeTypes.put("csv", MimeType.CSV);
     }
 
     public static MimeType findAutoMimeType(String fileName) {
