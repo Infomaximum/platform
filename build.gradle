@@ -10,7 +10,7 @@ if (project.hasProperty('ossrhUsername')) {
 }
 
 group 'com.infomaximum'
-version '0.1.20p1'
+version '0.1.20p2'
 
 ext.moduleName = 'com.infomaximum.platform'
 
