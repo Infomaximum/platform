@@ -6,10 +6,12 @@ plugins {
     id "org.checkerframework" version "0.6.46" //https://github.com/kelloggm/checkerframework-gradle-plugin
 }
 
-apply from: "${rootProject.projectDir}/gradle/publish-mavencentral.gradle"
+if (file("${rootProject.projectDir}/gradle/publish-mavencentral.gradle").exists() ) {
+    apply from: "${rootProject.projectDir}/gradle/publish-mavencentral.gradle"
+}
 
 group 'com.infomaximum'
-version '0.2.0'
+version '0.2.1'
 
 ext.moduleName = 'com.infomaximum.platform'
 
@@ -65,7 +67,7 @@ dependencies {
     api 'com.infomaximum:rdao:1.15.0'
 //    api project(':rdao')
 
-    api 'com.infomaximum:network:1.2.11'
+    api 'com.infomaximum:network:1.2.13'
 //    api project(':network')
 
     implementation 'io.prometheus:prometheus-metrics-core:1.3.5'
