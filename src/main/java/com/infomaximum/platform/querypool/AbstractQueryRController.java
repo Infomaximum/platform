@@ -1,6 +1,7 @@
 package com.infomaximum.platform.querypool;
 
 import com.infomaximum.cluster.anotation.DisableValidationRemoteMethod;
+import com.infomaximum.cluster.core.remote.RemoteTarget;
 import com.infomaximum.cluster.core.remote.Remotes;
 import com.infomaximum.cluster.core.remote.struct.RController;
 import com.infomaximum.cluster.core.remote.utils.RemoteControllerUtils;
@@ -46,6 +47,11 @@ public abstract class AbstractQueryRController<TComponent extends Component> {
     public final String getComponentUuid() {
         return component.getInfo().getUuid();
     }
+
+    public final RemoteTarget getRemoteTarget() {
+        return new RemoteTarget(getNodeRuntimeId(), component.getId(), getComponentUuid());
+    }
+
 
     public Method getRemoteMethod(Class<? extends RController> remoteControllerClazz, String name, Class<?>[] parameterTypes) {
         Map<String, List<Method>> hashControllerRemoteMethods = hashControllersRemoteMethods.get(remoteControllerClazz);
