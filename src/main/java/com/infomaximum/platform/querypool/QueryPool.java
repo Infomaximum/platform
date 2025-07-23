@@ -1,6 +1,5 @@
 package com.infomaximum.platform.querypool;
 
-import com.infomaximum.platform.Platform;
 import com.infomaximum.platform.exception.PlatformException;
 import com.infomaximum.platform.querypool.service.DetectHighLoad;
 import com.infomaximum.platform.querypool.service.DetectLongQuery;
@@ -18,6 +17,7 @@ import com.infomaximum.platform.utils.LockGuard;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
@@ -25,7 +25,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 public class QueryPool {
 
-    private final static Logger log = LoggerFactory.getLogger(QueryPool.class);
+    private static final Logger logger = LoggerFactory.getLogger(QueryPool.class);
 
     public enum LockType {
         SHARED, EXCLUSIVE
@@ -56,7 +56,7 @@ public class QueryPool {
         private volatile Instant timeComplete;
 
         QueryWrapper(QueryPool queryPool, Component component, ContextTransaction context, Query<T> query) throws PlatformException {
-            this(new QueryFuture<T>(queryPool, component, context, new CompletableFuture<>()), query);
+            this(new QueryFuture<>(queryPool, component, context, new CompletableFuture<>()), query);
         }
 
         QueryWrapper(QueryFuture<T> queryFuture, Query<T> query) throws PlatformException {
@@ -154,7 +154,7 @@ public class QueryPool {
     private final ArrayList<String> maintenanceMarkers = new ArrayList<>();
     private final ResourceMap occupiedResources = new ResourceMap();
     private final ResourceMap waitingResources = new ResourceMap();
-    private final ArrayList<Callback> emptyPoolListners = new ArrayList<>();
+    private final ArrayList<Callback> emptyPoolListeners = new ArrayList<>();
 
     private final DetectLongQuery detectLongQuery;
     private final DetectHighLoad detectHighLoad;
@@ -164,6 +164,8 @@ public class QueryPool {
     private volatile int highPriorityWaitingQueryCount = 0;
     private volatile int lowPriorityWaitingQueryCount = 0;
     private volatile PlatformException hardException = null;
+
+    private volatile Instant logLastTime = Instant.now();
 
     public QueryPool(boolean isVirtualThread, Thread.UncaughtExceptionHandler uncaughtExceptionHandler) {
         if (isVirtualThread) {
@@ -217,38 +219,39 @@ public class QueryPool {
     }
 
     public <T> QueryFuture<T> execute(Component component, ContextTransaction context, Query<T> query, boolean failIfPoolBusy) {
-        QueryWrapper<T> queryWrapp;
+        QueryWrapper<T> queryWrapper;
         try {
-            queryWrapp = new QueryWrapper<>(this, component, context, query);
+            queryWrapper = new QueryWrapper<>(this, component, context, query);
         } catch (PlatformException e) {
-            CompletableFuture future = new CompletableFuture();
+            CompletableFuture<T> future = new CompletableFuture<>();
             future.completeExceptionally(e);
             return new QueryFuture<>(this, component, context, future);
         }
-        return execute(queryWrapp, failIfPoolBusy);
+        return execute(queryWrapper, failIfPoolBusy);
     }
 
-    protected <T> QueryFuture<T> execute(QueryWrapper<T> queryWrapp, boolean failIfPoolBusy) {
-        if (hardException != null) {
-            queryWrapp.future.completeExceptionally(hardException);
-            return queryWrapp.future;
+    protected <T> QueryFuture<T> execute(QueryWrapper<T> queryWrapper, boolean failIfPoolBusy) {
+        PlatformException localHardException = hardException;
+        if (localHardException != null) {
+            queryWrapper.future.completeExceptionally(localHardException);
+            return queryWrapper.future;
         }
 
         try (LockGuard guard = new LockGuard(lock)) {
-            if (failIfPoolBusy && isOverloaded(queryWrapp.query.getPriority())) {
-                queryWrapp.future.completeExceptionally(createOverloadedException());
-            } else if (isOccupiedResources(queryWrapp.resources)) {
+            if (failIfPoolBusy && isOverloaded(queryWrapper.query.getPriority())) {
+                queryWrapper.future.completeExceptionally(createOverloadedException());
+            } else if (isOccupiedResources(queryWrapper.resources)) {
                 if (failIfPoolBusy && isMaintenance()) {
-                    queryWrapp.future.completeExceptionally(createMaintenanceException());
+                    queryWrapper.future.completeExceptionally(createMaintenanceException());
                 } else {
-                    captureWaitingResources(queryWrapp);
+                    captureWaitingResources(queryWrapper);
                 }
             } else {
-                submitQuery(queryWrapp);
+                submitQuery(queryWrapper);
             }
         }
 
-        return queryWrapp.future;
+        return queryWrapper.future;
     }
 
     public boolean isBusyFor(Priority priority) {
@@ -272,26 +275,26 @@ public class QueryPool {
             return null;
         }
 
-        QueryWrapper<T> queryWrapp = new QueryWrapper<>(this, component, context, query);
+        QueryWrapper<T> queryWrapper = new QueryWrapper<>(this, component, context, query);
 
         try (LockGuard guard = new LockGuard(lock)) {
-            if (isOverloaded(queryWrapp.query.getPriority()) || isOccupiedResources(queryWrapp.resources)) {
+            if (isOverloaded(queryWrapper.query.getPriority()) || isOccupiedResources(queryWrapper.resources)) {
                 return null;
             }
-            submitQuery(queryWrapp);
-            return queryWrapp.future;
+            submitQuery(queryWrapper);
+            return queryWrapper.future;
         }
     }
 
     public void addEmptyReachedListner(Callback callback) {
         try (LockGuard guard = new LockGuard(lock)) {
-            emptyPoolListners.add(callback);
+            emptyPoolListeners.add(callback);
         }
     }
 
     public void removeEmptyReachedListner(Callback callback) {
         try (LockGuard guard = new LockGuard(lock)) {
-            emptyPoolListners.remove(callback);
+            emptyPoolListeners.remove(callback);
         }
     }
 
@@ -300,17 +303,14 @@ public class QueryPool {
         try (LockGuard guard = new LockGuard(lock)) {
             listeners = getFiringEmptyPoolListners();
         }
-        fireEmptyPoolListners(listeners);
+        fireEmptyPoolListeners(listeners);
     }
 
     public boolean waitingQueryExists(Priority priority) {
-        switch (priority) {
-            case LOW:
-                return lowPriorityWaitingQueryCount != 0;
-            case HIGH:
-                return highPriorityWaitingQueryCount != 0;
-        }
-        return false;
+        return switch (priority) {
+            case LOW -> lowPriorityWaitingQueryCount != 0;
+            case HIGH -> highPriorityWaitingQueryCount != 0;
+        };
     }
 
     public Collection<QueryWrapper> getExecuteQueries() {
@@ -386,7 +386,7 @@ public class QueryPool {
                     trySubmitNextAvailableQueryBy(queryWrapp.resources);
                 }
 
-                fireEmptyPoolListners(emptyListners);
+                fireEmptyPoolListeners(emptyListners);
             });
         } catch (RejectedExecutionException e) {
             releaseOccupiedResources(queryWrapp);
@@ -398,54 +398,46 @@ public class QueryPool {
     }
 
     private Callback[] getFiringEmptyPoolListners() {
-        if (!occupiedResources.isEmpty() || !waitingResources.isEmpty() || emptyPoolListners.isEmpty()) {
+        if (!occupiedResources.isEmpty() || !waitingResources.isEmpty() || emptyPoolListeners.isEmpty()) {
             return null;
         }
 
-        Callback[] listners = new Callback[emptyPoolListners.size()];
-        emptyPoolListners.toArray(listners);
+        Callback[] listners = new Callback[emptyPoolListeners.size()];
+        emptyPoolListeners.toArray(listners);
         return listners;
     }
 
-    private void fireEmptyPoolListners(Callback[] listners) {
-        if (listners != null) {
-            for (Callback item : listners) {
+    private void fireEmptyPoolListeners(Callback[] listeners) {
+        if (listeners != null) {
+            for (Callback item : listeners) {
                 item.execute(this);
             }
         }
     }
 
-    private void captureOccupiedResources(QueryWrapper queryWrapp) {
-        appendResources(queryWrapp, occupiedResources);
-        pushMaintenance(queryWrapp.query.getMaintenanceMarker());
+    private void captureOccupiedResources(QueryWrapper queryWrapper) {
+        appendResources(queryWrapper, occupiedResources);
+        pushMaintenance(queryWrapper.query.getMaintenanceMarker());
     }
 
-    private void releaseOccupiedResources(QueryWrapper queryWrapp) {
-        popMaintenance(queryWrapp.query.getMaintenanceMarker());
-        removeResources(queryWrapp, occupiedResources);
+    private void releaseOccupiedResources(QueryWrapper queryWrapper) {
+        popMaintenance(queryWrapper.query.getMaintenanceMarker());
+        removeResources(queryWrapper, occupiedResources);
     }
 
-    private void captureWaitingResources(QueryWrapper queryWrapp) {
-        switch (queryWrapp.query.getPriority()) {
-            case LOW:
-                ++lowPriorityWaitingQueryCount;
-                break;
-            case HIGH:
-                ++highPriorityWaitingQueryCount;
-                break;
+    private void captureWaitingResources(QueryWrapper queryWrapper) {
+        switch (queryWrapper.query.getPriority()) {
+            case LOW -> ++lowPriorityWaitingQueryCount;
+            case HIGH -> ++highPriorityWaitingQueryCount;
         }
-        appendResources(queryWrapp, waitingResources);
+        appendResources(queryWrapper, waitingResources);
     }
 
-    private void releaseWaitingResources(QueryWrapper queryWrapp) {
-        removeResources(queryWrapp, waitingResources);
-        switch (queryWrapp.query.getPriority()) {
-            case LOW:
-                --lowPriorityWaitingQueryCount;
-                break;
-            case HIGH:
-                --highPriorityWaitingQueryCount;
-                break;
+    private void releaseWaitingResources(QueryWrapper queryWrapper) {
+        removeResources(queryWrapper, waitingResources);
+        switch (queryWrapper.query.getPriority()) {
+            case LOW -> --lowPriorityWaitingQueryCount;
+            case HIGH -> --highPriorityWaitingQueryCount;
         }
     }
 
@@ -478,19 +470,17 @@ public class QueryPool {
             return true;
         }
 
-        switch (newQueryPriority) {
-            case LOW:
+        return switch (newQueryPriority) {
+            case LOW ->
                 //В случа низкоприоритетных запросов смотрим так же и на очередь высокоприоритетных - и если там растет нагрузка,
                 // то низкоприоритетные мы сразу откидываем
-                return (
-                        //Аналог highPriorityWaitingQueryCount >= (MAX_WAITING_HIGH_QUERY_COUNT/4)
-                        (highPriorityWaitingQueryCount >= (MAX_WAITING_HIGH_QUERY_COUNT >> 2)) ||
-                                (lowPriorityWaitingQueryCount >= MAX_WAITING_LOW_QUERY_COUNT)
-                );
-            case HIGH:
-                return highPriorityWaitingQueryCount >= MAX_WAITING_HIGH_QUERY_COUNT;
-        }
-        return false;
+                    (
+                            //Аналог highPriorityWaitingQueryCount >= (MAX_WAITING_HIGH_QUERY_COUNT/4)
+                            (highPriorityWaitingQueryCount >= (MAX_WAITING_HIGH_QUERY_COUNT >> 2)) ||
+                                    (lowPriorityWaitingQueryCount >= MAX_WAITING_LOW_QUERY_COUNT)
+                    );
+            case HIGH -> highPriorityWaitingQueryCount >= MAX_WAITING_HIGH_QUERY_COUNT;
+        };
     }
 
     private boolean isFilledThreadPool() {
@@ -505,7 +495,7 @@ public class QueryPool {
 
     private void popMaintenance(String marker) {
         if (marker != null) {
-            maintenanceMarkers.remove(maintenanceMarkers.size() - 1);
+            maintenanceMarkers.removeLast();
         }
     }
 
@@ -514,13 +504,13 @@ public class QueryPool {
     }
 
     private boolean isOccupiedResources(final Map<String, LockType> targetResources) {
-        for (HashMap.Entry<String, LockType> res : targetResources.entrySet()) {
+        for (Map.Entry<String, LockType> res : targetResources.entrySet()) {
             ArrayList<QueryLockType> foundValue = occupiedResources.get(res.getKey());
             if (foundValue == null || foundValue.isEmpty()) {
                 continue;
             }
 
-            if (res.getValue() == LockType.EXCLUSIVE || foundValue.get(0).lockType == LockType.EXCLUSIVE) {
+            if (res.getValue() == LockType.EXCLUSIVE || foundValue.getFirst().lockType == LockType.EXCLUSIVE) {
                 return true;
             }
         }
@@ -537,13 +527,8 @@ public class QueryPool {
 
     private static void appendResources(QueryWrapper<?> query, ResourceMap destination) {
         for (Map.Entry<String, LockType> entry : query.resources.entrySet()) {
-            ArrayList<QueryLockType> foundValue = destination.get(entry.getKey());
-            if (foundValue == null) {
-                foundValue = new ArrayList<>();
-                destination.put(entry.getKey(), foundValue);
-            }
-
-            foundValue.add(new QueryLockType(query, entry.getValue()));
+            destination.computeIfAbsent(entry.getKey(), k -> new ArrayList<>())
+                    .add(new QueryLockType(query, entry.getValue()));
         }
     }
 
@@ -562,14 +547,56 @@ public class QueryPool {
     }
 
     private PlatformException createMaintenanceException() {
-        return GeneralExceptionBuilder.buildServerBusyException(maintenanceMarkers.get(maintenanceMarkers.size() - 1));
+        return GeneralExceptionBuilder.buildServerBusyException(maintenanceMarkers.getLast());
     }
 
     private PlatformException createOverloadedException() {
         if (isMaintenance()) {
             return createMaintenanceException();
         }
-
+        writeStateToLog();
         return GeneralExceptionBuilder.buildServerOverloadedException();
+    }
+
+    private void writeStateToLog() {
+        Duration period = Duration.ofMinutes(5);
+        Instant currentTime = Instant.now();
+        if (currentTime.minus(period).isAfter(logLastTime)) {
+            logLastTime = Instant.now();
+            StringBuilder builder = new StringBuilder();
+            builder.append("threadPoolActiveCount: ")
+                    .append(threadPool.getActiveCount())
+                    .append(" | threadPoolQueueSize: ")
+                    .append(threadPool.getQueue().size())
+                    .append(" | lowPriorityWaitingQueryCount: ")
+                    .append(lowPriorityWaitingQueryCount)
+                    .append(" | highPriorityWaitingQueryCount: ")
+                    .append(highPriorityWaitingQueryCount);
+            builder.append("\n occupiedResources: ");
+            writeResourceMapTo(builder, occupiedResources);
+            builder.append("\n waitingResources: ");
+            writeResourceMapTo(builder, waitingResources);
+            logger.debug(builder.toString());
+        }
+    }
+
+    private void writeResourceMapTo(StringBuilder destination, ResourceMap resourceMap) {
+        for (Map.Entry<String, ArrayList<QueryLockType>> entry : resourceMap.entrySet()) {
+            int sharedCount = 0;
+            int exclusiveCount = 0;
+            for (QueryLockType query : entry.getValue()) {
+                switch (query.lockType) {
+                    case SHARED -> sharedCount++;
+                    case EXCLUSIVE -> exclusiveCount++;
+                }
+            }
+            destination.append('\n')
+                    .append("resource: ")
+                    .append(entry.getKey())
+                    .append(" | exclusiveCount: ")
+                    .append(exclusiveCount)
+                    .append(" | sharedCount: ")
+                    .append(sharedCount);
+        }
     }
 }
