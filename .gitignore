@@ -14,4 +14,4 @@ build/
 !gradle-wrapper.jar
 
 gradle.properties
-
+jreleaser.toml
