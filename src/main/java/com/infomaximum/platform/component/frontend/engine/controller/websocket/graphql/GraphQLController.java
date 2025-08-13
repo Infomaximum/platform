@@ -13,8 +13,10 @@ import com.infomaximum.platform.component.frontend.engine.filter.FilterGRequest;
 import com.infomaximum.platform.component.frontend.engine.network.protocol.GraphQLSubscriber;
 import com.infomaximum.platform.component.frontend.engine.network.protocol.standard.subscriber.WebSocketStandardSubscriber;
 import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.GraphQLRequestExecuteService;
+import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.struct.GExecutionStatistics;
 import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.struct.GraphQLResponse;
 import com.infomaximum.platform.component.frontend.request.GRequestWebSocket;
+import com.infomaximum.platform.component.frontend.utils.GRequestUtils;
 import com.infomaximum.platform.exception.GraphQLWrapperPlatformException;
 import com.infomaximum.platform.exception.PlatformException;
 import com.infomaximum.platform.sdk.exception.GeneralExceptionBuilder;
@@ -82,6 +84,12 @@ public class GraphQLController {
                 null
         );
 
+        log.debug("WS Request {}, xTraceId: {}, remote address: {}, query: {}",
+                GRequestUtils.getTraceRequest(gRequest),
+                gRequest.getXTraceId(),
+                gRequest.getRemoteAddress().endRemoteAddress,
+                gRequest.getQuery().replaceAll("[\\s\\t\\r\\n]+", " ")
+        );
 
         if (frontendEngine.getFilterGRequests() != null) {
             try {
@@ -98,13 +106,33 @@ public class GraphQLController {
 
         return frontendEngine.getGraphQLRequestExecuteService()
                 .execute(gRequest)
-                .thenCompose(graphQLResponse -> buildResponseEntity(graphQLResponse, transportSession, targetPacket));
+                .thenCompose(graphQLResponse -> buildResponseEntity(graphQLResponse, gRequest, transportSession, targetPacket));
     }
 
     private CompletableFuture<ResponseEntity> buildResponseEntity(
-            GraphQLResponse graphQLResponse,
+            GraphQLResponse graphQLResponse, GRequest gRequest,
             StandardTransportSession transportSession, TargetPacket packet
     ) {
+        GExecutionStatistics statistics = graphQLResponse.statistics;
+        if (statistics == null) {
+            log.debug("WS Request {}, session: {}, response: {}",
+                    (gRequest != null) ? GRequestUtils.getTraceRequest(gRequest) : null,
+                    transportSession.getSession().getUuid(),
+                    (graphQLResponse.error) ? "error " + graphQLResponse.data.toString() : "success"
+            );
+        } else {
+            log.debug("WS Request {}, session: {}, auth: {}, priority: {}, wait: {}, exec: {} ({}), response: {}{}",
+                    (gRequest != null) ? GRequestUtils.getTraceRequest(gRequest) : null,
+                    transportSession.getSession().getUuid(),
+                    statistics.authContext(),
+                    statistics.priority(),
+                    statistics.timeWait(),
+                    statistics.timeExec(),
+                    statistics.timeAuth(),
+                    (graphQLResponse.error) ? "error " + graphQLResponse.data.toString() : "success",
+                    (statistics.accessDenied() != null)?", access_denied: [ " + statistics.accessDenied() + "]": ""
+            );
+        }
         if (graphQLResponse.error) {
             return CompletableFuture.completedFuture(
                     ResponseEntity.error((JSONObject) graphQLResponse.data)
