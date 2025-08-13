@@ -13,10 +13,14 @@ import com.infomaximum.platform.component.frontend.engine.network.protocol.graph
 import com.infomaximum.platform.component.frontend.engine.network.protocol.graphqltransportws.packet.TypePacket;
 import com.infomaximum.platform.component.frontend.engine.network.protocol.graphqltransportws.subscriber.WebSocketGraphQLTransportWSSubscriber;
 import com.infomaximum.platform.component.frontend.engine.provider.ProviderGraphQLRequestExecuteService;
+import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.struct.GExecutionStatistics;
 import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.struct.GraphQLResponse;
 import com.infomaximum.platform.component.frontend.request.GRequestWebSocket;
+import com.infomaximum.platform.component.frontend.utils.GRequestUtils;
 import net.minidev.json.JSONArray;
 import net.minidev.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
 import java.time.Instant;
@@ -25,6 +29,8 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 public class GraphQLTransportWSHandler implements PacketHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GraphQLTransportWSHandler.class);
 
     private final ProviderGraphQLRequestExecuteService providerGraphQLRequestExecuteService;
 
@@ -92,15 +98,42 @@ public class GraphQLTransportWSHandler implements PacketHandler {
                 session.getHandshakeData()
         );
 
+        log.debug("WS Request {}, xTraceId: {}, remote address: {}, query: {}",
+                GRequestUtils.getTraceRequest(gRequest),
+                gRequest.getXTraceId(),
+                gRequest.getRemoteAddress().endRemoteAddress,
+                gRequest.getQuery().replaceAll("[\\s\\t\\r\\n]+", " ")
+        );
+
         return providerGraphQLRequestExecuteService.getGraphQLRequestExecuteService()
                 .execute(gRequest)
-                .thenCompose(graphQLResponse -> buildResponsePacket(graphQLResponse, session, requestPacket));
+                .thenCompose(graphQLResponse -> buildResponsePacket(graphQLResponse, gRequest, session, requestPacket));
     }
 
     private CompletableFuture<IPacket[]> buildResponsePacket(
-            GraphQLResponse graphQLResponse,
+            GraphQLResponse graphQLResponse, GRequest gRequest,
             Session session, Packet requestPacket
     ) {
+        GExecutionStatistics statistics = graphQLResponse.statistics;
+        if (statistics == null) {
+            log.debug("WS Request {}, session: {}, response: {}",
+                    (gRequest != null) ? GRequestUtils.getTraceRequest(gRequest) : null,
+                    session.getUuid(),
+                    (graphQLResponse.error) ? "error " + graphQLResponse.data.toString() : "success"
+            );
+        } else {
+            log.debug("WS Request {}, session: {}, auth: {}, priority: {}, wait: {}, exec: {} ({}), response: {}{}",
+                    (gRequest != null) ? GRequestUtils.getTraceRequest(gRequest) : null,
+                    session.getUuid(),
+                    statistics.authContext(),
+                    statistics.priority(),
+                    statistics.timeWait(),
+                    statistics.timeExec(),
+                    statistics.timeAuth(),
+                    (graphQLResponse.error) ? "error " + graphQLResponse.data.toString() : "success",
+                    (statistics.accessDenied() != null)?", access_denied: [ " + statistics.accessDenied() + "]": ""
+            );
+        }
         if (graphQLResponse.error) {
             JSONArray jErrors = new JSONArray();
             jErrors.add(graphQLResponse.data);
