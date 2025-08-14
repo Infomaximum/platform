@@ -226,6 +226,10 @@ public class GeneralExceptionBuilder {
         return EXCEPTION_FACTORY.build(OBLIGATORY_PARAM, fieldName);
     }
 
+    public static PlatformException buildTooLargeDataException(String message) {
+        return EXCEPTION_FACTORY.build("too_large_data", message);
+    }
+
 }
 
 
