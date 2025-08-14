@@ -18,6 +18,7 @@ import com.infomaximum.platform.exception.GraphQLWrapperPlatformException;
 import com.infomaximum.platform.exception.PlatformException;
 import com.infomaximum.platform.sdk.graphql.out.GOutputFile;
 import com.infomaximum.platform.utils.EscapeUtils;
+import com.infomaximum.platform.utils.StringUtils;
 import jakarta.servlet.http.HttpServletRequest;
 import net.minidev.json.JSONObject;
 import org.eclipse.jetty.server.Request;
@@ -174,7 +175,13 @@ public class GraphQLController {
         headers.setExpires(0);
 
         String sout = out.toString();
-        byte[] bout = sout.getBytes(StandardCharsets.UTF_8);
+        byte[] bout;
+        try {
+            bout = StringUtils.getBytesUTF8(sout);
+        } catch (PlatformException e) {
+            GraphQLWrapperPlatformException wrapperPE = GraphQLExecutionResultUtils.coercionGraphQLPlatformException(e);
+            return buildResponseEntity(gRequest, wrapperPE);
+        }
 
         GExecutionStatistics statistics = graphQLResponse.statistics;
         if (statistics == null) {
