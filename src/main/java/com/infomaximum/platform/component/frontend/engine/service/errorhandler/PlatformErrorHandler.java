@@ -35,7 +35,7 @@ public class PlatformErrorHandler implements ErrorHandler {
     }
 
     @Override
-    public void handle(Request request, Response response, Throwable throwable) {
+    public void handle(Request request, Response response, String errorMessage, Throwable throwable) {
         try {
             if (response.getStatus() == HttpStatus.NOT_FOUND.value()) {
                 actionErrorHandler.handlerNotFound(response);
@@ -52,7 +52,8 @@ public class PlatformErrorHandler implements ErrorHandler {
                 response.write(true, ByteBuffer.wrap(responseEntity.getBody()), Callback.NOOP);
                 log.error("SERVICE_UNAVAILABLE", (Throwable) request.getAttribute(Dispatcher.ERROR_EXCEPTION));
             } else if (response.getStatus() >= 400 && response.getStatus() < 500) {
-                //Ошибки построения запроса клиентом - игнорируем и прокидываем ответ напрямую
+                //Ошибочный запрос от клиентом - игнорируем и прокидываем ответ напрямую
+                log.debug("Error request, code: {}, message: {}", response.getStatus(), errorMessage);
             } else {
                 if (throwable == null) {
                     throw new RuntimeException("Unknown state errorHandler, response status:" + response.getStatus() + ", " + response);
