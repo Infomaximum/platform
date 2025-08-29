@@ -11,7 +11,7 @@ if (file("${rootProject.projectDir}/gradle/publish-mavencentral.gradle").exists(
 }
 
 group 'com.infomaximum'
-version '0.2.2p5'
+version '0.2.2p6'
 
 ext.moduleName = 'com.infomaximum.platform'
 
