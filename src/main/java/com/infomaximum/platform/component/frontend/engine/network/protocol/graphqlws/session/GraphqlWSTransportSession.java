@@ -57,6 +57,11 @@ public class GraphqlWSTransportSession extends TransportSession {
     }
 
     @Override
+    public String getXTraceId() {
+        throw new UnsupportedOperationException("Not implemented");
+    }
+
+    @Override
     public boolean isPhaseHandshake() {
         return phaseHandshake;
     }
