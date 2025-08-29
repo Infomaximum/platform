@@ -9,7 +9,7 @@ plugins {
 apply from: "${rootProject.projectDir}/gradle/publish-mavencentral.gradle"
 
 group 'com.infomaximum'
-version '0.1.32'
+version '0.1.32p1'
 
 ext.moduleName = 'com.infomaximum.platform'
 
