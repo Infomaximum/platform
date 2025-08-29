@@ -12,10 +12,9 @@ import com.infomaximum.platform.exception.PlatformException;
 
 import java.util.concurrent.CompletableFuture;
 
-/**
- * Created by kris on 01.09.16.
- */
 public abstract class Handshake implements PacketHandler {
+
+    public record HandshakeCompletable(Response response, HandshakeData handshakeData){}
 
     public Handshake() {
     }
@@ -42,7 +41,7 @@ public abstract class Handshake implements PacketHandler {
         ((SessionImpl)session).getTransportSession().failPhaseHandshake(responsePacket);
     }
 
-    public abstract Response handshake(Packet packet) throws PlatformException;
+    public abstract HandshakeCompletable handshake(Packet packet) throws PlatformException;
 
     @Override
     public CompletableFuture<IPacket[]> exec(Session session, IPacket packet) {
@@ -50,10 +49,9 @@ public abstract class Handshake implements PacketHandler {
         Packet responsePacket;
         if (requestPacket.type == TypePacket.GQL_CONNECTION_INIT) {
             try {
-                Response handshakeResponse = handshake(requestPacket);
-                HandshakeData handshakeData = handshakeResponse.handshakeData();
-                completedPhaseHandshake(session, handshakeData);
-                responsePacket = new Packet(requestPacket.id, TypePacket.GQL_CONNECTION_ACK, handshakeResponse.payload());
+                HandshakeCompletable handshakeCompletable = handshake(requestPacket);
+                completedPhaseHandshake(session, handshakeCompletable.handshakeData);
+                responsePacket = new Packet(requestPacket.id, TypePacket.GQL_CONNECTION_ACK, handshakeCompletable.response.payload());
             } catch (PlatformException e) {
                 responsePacket = new Packet(requestPacket.id, TypePacket.GQL_CONNECTION_ERROR);
             }
