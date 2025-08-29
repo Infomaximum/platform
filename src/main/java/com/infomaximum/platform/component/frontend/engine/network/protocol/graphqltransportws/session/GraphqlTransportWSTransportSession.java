@@ -9,6 +9,7 @@ import com.infomaximum.network.struct.HandshakeData;
 import com.infomaximum.network.struct.UpgradeRequest;
 import com.infomaximum.network.transport.Transport;
 import com.infomaximum.platform.component.frontend.engine.network.protocol.graphqltransportws.GraphqlTransportWSProtocol;
+import com.infomaximum.platform.component.frontend.engine.network.protocol.graphqltransportws.handler.handshake.HandshakeDataImpl;
 import com.infomaximum.platform.component.frontend.engine.network.protocol.graphqltransportws.packet.Packet;
 import net.minidev.json.JSONObject;
 import net.minidev.json.parser.JSONParser;
@@ -57,6 +58,11 @@ public class GraphqlTransportWSTransportSession extends TransportSession {
     @Override
     public void failPhaseHandshake(IPacket responsePacket) {
 
+    }
+
+    @Override
+    public String getXTraceId() {
+        return ((HandshakeDataImpl)session.getHandshakeData()).xTraceId;
     }
 
     @Override
