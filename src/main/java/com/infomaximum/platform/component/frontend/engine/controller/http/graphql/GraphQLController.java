@@ -178,13 +178,13 @@ public class GraphQLController {
 
         GExecutionStatistics statistics = graphQLResponse.statistics;
         if (statistics == null) {
-            log.debug("Request {}, http code: {}, response: {}",
+            log.debug("Request {}, response: {} - {}",
                     (gRequest != null) ? GRequestUtils.getTraceRequest(gRequest) : null,
                     httpStatus.value(),
                     (graphQLResponse.error) ? sout : "hide(" + bout.length + " bytes)"
             );
         } else {
-            log.debug("Request {}, auth: {}, priority: {}, wait: {}, exec: {} ({}), http code: {}, response: {}{}",
+            log.debug("Request {}, auth: {}, priority: {}, wait: {}, exec: {} ({}), response: {} - {}{}",
                     (gRequest != null) ? GRequestUtils.getTraceRequest(gRequest) : null,
                     statistics.authContext(),
                     statistics.priority(),

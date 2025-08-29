@@ -85,7 +85,9 @@ public class GraphQLTransportWSHandler implements PacketHandler {
         Map<String, String> parameters = upgradeRequest.getParameters();
 
         RemoteAddress remoteAddress = ((SessionImpl) session).getTransportSession().buildRemoteAddress();
-        String xTraceId = ((SessionImpl) session).getTransportSession().getXTraceId();
+
+        String parentXTraceId = ((SessionImpl) session).getTransportSession().getXTraceId();
+        String xTraceId = parentXTraceId + "." + requestPacket.id;
 
         GRequestWebSocket gRequest = new GRequestWebSocket(
                 Instant.now(),
@@ -98,7 +100,7 @@ public class GraphQLTransportWSHandler implements PacketHandler {
                 session.getHandshakeData()
         );
 
-        log.debug("WS Request {}, xTraceId: {}, remote address: {}, query: {}",
+        log.debug("Request {}, xTraceId: {}, remote address: {}, query: {}",
                 GRequestUtils.getTraceRequest(gRequest),
                 gRequest.getXTraceId(),
                 gRequest.getRemoteAddress().endRemoteAddress,
@@ -116,15 +118,13 @@ public class GraphQLTransportWSHandler implements PacketHandler {
     ) {
         GExecutionStatistics statistics = graphQLResponse.statistics;
         if (statistics == null) {
-            log.debug("WS Request {}, session: {}, response: {}",
+            log.debug("Request {}, response: {}",
                     (gRequest != null) ? GRequestUtils.getTraceRequest(gRequest) : null,
-                    session.getUuid(),
                     (graphQLResponse.error) ? "error " + graphQLResponse.data.toString() : "success"
             );
         } else {
-            log.debug("WS Request {}, session: {}, auth: {}, priority: {}, wait: {}, exec: {} ({}), response: {}{}",
+            log.debug("Request {}, auth: {}, priority: {}, wait: {}, exec: {} ({}), response: {}{}",
                     (gRequest != null) ? GRequestUtils.getTraceRequest(gRequest) : null,
-                    session.getUuid(),
                     statistics.authContext(),
                     statistics.priority(),
                     statistics.timeWait(),
@@ -134,14 +134,15 @@ public class GraphQLTransportWSHandler implements PacketHandler {
                     (statistics.accessDenied() != null)?", access_denied: [ " + statistics.accessDenied() + "]": ""
             );
         }
+
+        Object data = graphQLResponse.data;
         if (graphQLResponse.error) {
             JSONArray jErrors = new JSONArray();
-            jErrors.add(graphQLResponse.data);
+            jErrors.add(data);
             return CompletableFuture.completedFuture(new IPacket[]{
                     new Packet(requestPacket.id, TypePacket.GQL_ERROR, jErrors)
             });
         } else {
-            Object data = graphQLResponse.data;
             if (data instanceof JSONObject jPayload) {
                 return CompletableFuture.completedFuture(new IPacket[]{
                         new Packet(requestPacket.id, TypePacket.GQL_NEXT, jPayload),
