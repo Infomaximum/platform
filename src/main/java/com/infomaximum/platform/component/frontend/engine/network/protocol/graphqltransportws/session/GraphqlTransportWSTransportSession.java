@@ -39,7 +39,10 @@ public class GraphqlTransportWSTransportSession extends TransportSession {
     @Override
     public IPacket parse(String message) throws ParsePacketNetworkException {
         try {
-            JSONObject incoming = (JSONObject) new JSONParser(JSONParser.DEFAULT_PERMISSIVE_MODE).parse(message);
+            Object objectParse = new JSONParser(JSONParser.DEFAULT_PERMISSIVE_MODE).parse(message);
+            if (!(objectParse instanceof JSONObject incoming)) {
+                throw new ParsePacketNetworkException("Message is not JSON!");
+            }
             return Packet.parse(incoming);
         } catch (ParseException e) {
             throw new ParsePacketNetworkException(e);
