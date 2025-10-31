@@ -73,6 +73,9 @@ public class Platform implements AutoCloseable {
     }
 
     public void start() throws PlatformException {
+        //Старт cluster с подключением удаленных нод
+        cluster.start();
+
         new PlatformStartStop(this, componentEventListenerService).start(false);
     }
 
