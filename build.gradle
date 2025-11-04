@@ -11,7 +11,7 @@ if (file("${rootProject.projectDir}/gradle/publish-mavencentral.gradle").exists(
 }
 
 group 'com.infomaximum'
-version '0.2.2p7'
+version '0.2.3'
 
 ext.moduleName = 'com.infomaximum.platform'
 
@@ -58,7 +58,7 @@ repositories {
 
 dependencies {
 
-    api 'com.infomaximum:cluster:1.1.14'
+    api 'com.infomaximum:cluster:1.1.15'
 //    api project(':cluster')
 
     api 'com.infomaximum:cluster-graphql:1.1.20'
