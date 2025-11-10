@@ -145,6 +145,11 @@ public class PlatformErrorHandler implements ErrorHandler {
         ) {
             //Unsupported HTTP version: org.eclipse.jetty.http.HttpException$RuntimeException: 505: HTTP/0.9 not supported
             return;
+        } else if (chainThrowables.size() == 1
+                && chainThrowables.get(0) instanceof IllegalStateException
+        ) {
+            //java.lang.IllegalStateException: Committed
+            return;
         }
 
         String msgException = "Request: " + request.toString() + ", response.status: " + response.getStatus();
