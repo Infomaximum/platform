@@ -109,8 +109,11 @@ public abstract class Component extends com.infomaximum.cluster.struct.Component
         } catch (DatabaseException e) {
             throw GeneralExceptionBuilder.buildDatabaseException(e);
         }
+    }
 
-        this.graphQLSubscribeEvent = new GraphQLSubscribeEvent(this);
+    public void onStarted() {
+        super.start();
+        queryRemotes.assembleControllers();
     }
 
     public SchemaService buildSchemaService() {
@@ -142,6 +145,8 @@ public abstract class Component extends com.infomaximum.cluster.struct.Component
         this.domainObjectSource = new DomainObjectSource(dbProvider, true);
 
         this.queryRemotes = new QueryRemotes(this);
+
+        this.graphQLSubscribeEvent = new GraphQLSubscribeEvent(this);
     }
 
     //TODO Ulitin V. Временное решение - после переноса механизма обновления в платформу - убрать
