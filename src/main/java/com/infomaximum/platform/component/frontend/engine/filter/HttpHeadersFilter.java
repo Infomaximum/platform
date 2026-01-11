@@ -34,7 +34,7 @@ public class HttpHeadersFilter implements Filter {
 
     public static class Builder {
 
-        private String contentSecurityPolicyValue = "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; img-src 'self' data:";
+        private String contentSecurityPolicyValue = "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; form-action 'self'; frame-ancestors 'none'; img-src 'self' data:";
         private String contentTypeOptionsValue = "nosniff";
         private String xssProtectionValue = "1; mode=block";
 
