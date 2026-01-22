@@ -23,7 +23,7 @@ import com.infomaximum.platform.querypool.Query;
 import com.infomaximum.platform.querypool.QueryTransaction;
 import com.infomaximum.platform.querypool.ResourceProvider;
 import com.infomaximum.platform.sdk.component.Component;
-import com.infomaximum.platform.sdk.component.ComponentEventListener;
+import com.infomaximum.platform.service.ComponentEventService;
 import com.infomaximum.platform.sdk.context.ContextTransaction;
 import com.infomaximum.platform.sdk.context.impl.ContextTransactionImpl;
 import com.infomaximum.platform.sdk.context.source.impl.SourceSystemImpl;
@@ -51,11 +51,11 @@ public class PlatformUpgrade {
 
     private final Platform platform;
 
-    private final ComponentEventListener componentEventListener;
+    private final ComponentEventService componentEventService;
 
-    public PlatformUpgrade(Platform platform, ComponentEventListener componentEventListener) {
+    public PlatformUpgrade(Platform platform, ComponentEventService componentEventService) {
         this.platform = platform;
-        this.componentEventListener = componentEventListener;
+        this.componentEventService = componentEventService;
     }
 
     public void install() throws PlatformException {
@@ -112,8 +112,8 @@ public class PlatformUpgrade {
             }
         });
 
-        new PlatformStartStop(platform, componentEventListener).start(true);
-        new PlatformStartStop(platform, componentEventListener).stop(true);
+        new PlatformStartStop(platform, componentEventService).start(true);
+        new PlatformStartStop(platform, componentEventService).stop(true);
     }
 
     private void fireOnInstall(DatabaseComponent databaseComponent, List<Component> components) throws PlatformException {
@@ -212,7 +212,7 @@ public class PlatformUpgrade {
                     break;
                 case INSTALL:
                     log.warn("Module " + module.getInfo().getUuid() + " installing");
-                    new PlatformUpgrade(platform, componentEventListener).installComponent(module, transaction);
+                    new PlatformUpgrade(platform, componentEventService).installComponent(module, transaction);
                     componentsForInstall.add(module);
                     break;
                 case UPDATE:

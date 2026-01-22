@@ -10,7 +10,7 @@ import com.infomaximum.platform.querypool.Query;
 import com.infomaximum.platform.querypool.QueryTransaction;
 import com.infomaximum.platform.querypool.ResourceProvider;
 import com.infomaximum.platform.sdk.component.Component;
-import com.infomaximum.platform.sdk.component.ComponentEventListener;
+import com.infomaximum.platform.service.ComponentEventService;
 import com.infomaximum.platform.sdk.component.ComponentType;
 import com.infomaximum.platform.sdk.context.ContextTransaction;
 import com.infomaximum.platform.sdk.context.impl.ContextTransactionImpl;
@@ -32,11 +32,11 @@ public class PlatformStartStop {
 
     private final Platform platform;
 
-    private final ComponentEventListener componentEventListener;
+    private final ComponentEventService componentEventService;
 
-    public PlatformStartStop(Platform platform, ComponentEventListener componentEventListener) {
+    public PlatformStartStop(Platform platform, ComponentEventService componentEventService) {
         this.platform = platform;
-        this.componentEventListener = componentEventListener;
+        this.componentEventService = componentEventService;
     }
 
     /**
@@ -80,6 +80,8 @@ public class PlatformStartStop {
                 executeQuerySystem(databaseComponent, querySystem);
             }
             component.onStarted();
+            componentEventService.pushEventOnStarted(platform.getCluster().node, component.getRuntimeComponentInfo());
+            componentEventService.pushEventOnAvailable(platform.getCluster().node, component.getRuntimeComponentInfo());
         }
     }
 
@@ -112,6 +114,8 @@ public class PlatformStartStop {
             if (querySystem != null) {
                 executeQuerySystem(databaseComponent, querySystem);
             }
+            componentEventService.pushEventOnStopped(platform.getCluster().node, component.getRuntimeComponentInfo());
+            componentEventService.pushEventOnUnavailable(platform.getCluster().node, component.getRuntimeComponentInfo());
         }
     }
 
