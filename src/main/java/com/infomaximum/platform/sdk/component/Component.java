@@ -11,13 +11,10 @@ import com.infomaximum.database.maintenance.SchemaService;
 import com.infomaximum.database.provider.DBProvider;
 import com.infomaximum.database.schema.Schema;
 import com.infomaximum.database.schema.StructEntity;
-import com.infomaximum.platform.Platform;
 import com.infomaximum.platform.exception.PlatformException;
 import com.infomaximum.platform.sdk.dbprovider.ComponentDBProvider;
 import com.infomaximum.platform.sdk.exception.GeneralExceptionBuilder;
 import com.infomaximum.platform.sdk.remote.QueryRemotes;
-import com.infomaximum.platform.sdk.remote.component.ComponentEventListenerService;
-import com.infomaximum.platform.sdk.remote.node.UpdateNodeConnectService;
 import com.infomaximum.platform.sdk.struct.ClusterContext;
 import com.infomaximum.platform.sdk.struct.querypool.QuerySystem;
 import com.infomaximum.platform.sdk.subscription.GraphQLSubscribeEvent;
@@ -26,7 +23,7 @@ import org.reflections.Reflections;
 import java.util.HashSet;
 import java.util.Set;
 
-public abstract class Component extends com.infomaximum.cluster.struct.Component {
+public abstract class Component extends com.infomaximum.cluster.struct.Component implements ComponentEvent {
 
     protected DBProvider dbProvider;
     protected DomainObjectSource domainObjectSource;
@@ -70,14 +67,6 @@ public abstract class Component extends com.infomaximum.cluster.struct.Component
 
     public ComponentType getType() {
         return null;
-    }
-
-    public UpdateNodeConnectService getNodeConnectService() {
-        return Platform.get().getNodeConnectService();
-    }
-
-    public ComponentEventListenerService getComponentEventListenerService() {
-        return Platform.get().getComponentEventListenerService();
     }
 
     public QuerySystem<Void> onInstall() {
