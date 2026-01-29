@@ -6,30 +6,23 @@ import com.infomaximum.cluster.event.CauseNodeDisconnect;
 import com.infomaximum.platform.Platform;
 import com.infomaximum.platform.sdk.component.Component;
 
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.function.Supplier;
-
 import static com.infomaximum.platform.sdk.component.ComponentEvent.*;
+import static com.infomaximum.platform.service.ComponentEventQueue.*;
 
 public class ComponentEventService {
 
-    public final ExecutorService executorsVirtualThreads;
     private final Platform platform;
 
     public ComponentEventService(Platform platform) {
         this.platform = platform;
-        this.executorsVirtualThreads = Executors.newVirtualThreadPerTaskExecutor();
     }
 
     public void pushEventOnConnect(Node node) {
         platform.getCluster().getDependencyOrderedComponentsOf(Component.class)
                 .forEach(component -> {
                     if (isExistMethodInClass(component.getClass(), METHOD_ON_EVENT_CONNECT, Node.class)) {
-                        pushEvent(() -> {
-                            component.onEventConnect(node);
-                            return null;
-                        });
+                        Event event = new Event(METHOD_ON_EVENT_CONNECT, node, () -> component.onEventConnect(node));
+                        component.getComponentEventQueue(platform).pushEvent(event);
                     }
                 });
     }
@@ -38,10 +31,8 @@ public class ComponentEventService {
         platform.getCluster().getDependencyOrderedComponentsOf(Component.class)
                 .forEach(component -> {
                     if (isExistMethodInClass(component.getClass(), METHOD_ON_EVENT_DISCONNECT, Node.class, CauseNodeDisconnect.class)) {
-                        pushEvent(() -> {
-                            component.onEventDisconnect(node, cause);
-                            return null;
-                        });
+                        Event event = new Event(METHOD_ON_EVENT_DISCONNECT, node, () -> component.onEventDisconnect(node, cause));
+                        component.getComponentEventQueue(platform).pushEvent(event);
                     }
                 });
     }
@@ -50,10 +41,8 @@ public class ComponentEventService {
         platform.getCluster().getDependencyOrderedComponentsOf(Component.class)
                 .forEach(component -> {
                     if (isExistMethodInClass(component.getClass(), METHOD_ON_EVENT_STARTED, Node.class, RuntimeComponentInfo.class)) {
-                        pushEvent(() -> {
-                            component.onEventStarted(node, runtimeComponentInfo);
-                            return null;
-                        });
+                        Event event = new Event(METHOD_ON_EVENT_STARTED, node, () -> component.onEventStarted(node, runtimeComponentInfo));
+                        component.getComponentEventQueue(platform).pushEvent(event);
                     }
                 });
     }
@@ -62,10 +51,8 @@ public class ComponentEventService {
         platform.getCluster().getDependencyOrderedComponentsOf(Component.class)
                 .forEach(component -> {
                     if (isExistMethodInClass(component.getClass(), METHOD_ON_EVENT_STOPPED, Node.class, RuntimeComponentInfo.class)) {
-                        pushEvent(() -> {
-                            component.onEventStopped(node, runtimeComponentInfo);
-                            return null;
-                        });
+                        Event event = new Event(METHOD_ON_EVENT_STOPPED, node, () -> component.onEventStopped(node, runtimeComponentInfo));
+                        component.getComponentEventQueue(platform).pushEvent(event);
                     }
                 });
     }
@@ -74,10 +61,8 @@ public class ComponentEventService {
         platform.getCluster().getDependencyOrderedComponentsOf(Component.class)
                 .forEach(component -> {
                     if (isExistMethodInClass(component.getClass(), METHOD_ON_EVENT_AVAILABLE, Node.class, RuntimeComponentInfo.class)) {
-                        pushEvent(() -> {
-                            component.onEventAvailable(node, runtimeComponentInfo);
-                            return null;
-                        });
+                        Event event = new Event(METHOD_ON_EVENT_AVAILABLE, node, () -> component.onEventAvailable(node, runtimeComponentInfo));
+                        component.getComponentEventQueue(platform).pushEvent(event);
                     }
                 });
     }
@@ -86,22 +71,10 @@ public class ComponentEventService {
         platform.getCluster().getDependencyOrderedComponentsOf(Component.class)
                 .forEach(component -> {
                     if (isExistMethodInClass(component.getClass(), METHOD_ON_EVENT_UNAVAILABLE, Node.class, RuntimeComponentInfo.class)) {
-                        pushEvent(() -> {
-                            component.onEventUnavailable(node, runtimeComponentInfo);
-                            return null;
-                        });
+                        Event event = new Event(METHOD_ON_EVENT_UNAVAILABLE, node, () -> component.onEventUnavailable(node, runtimeComponentInfo));
+                        component.getComponentEventQueue(platform).pushEvent(event);
                     }
                 });
-    }
-
-    private void pushEvent(Supplier<Void> eventSupplier) {
-        executorsVirtualThreads.execute(() -> {
-            try {
-                eventSupplier.get();
-            } catch (Throwable e) {
-                platform.getUncaughtExceptionHandler().uncaughtException(Thread.currentThread(), e);
-            }
-        });
     }
 
     private static boolean isExistMethodInClass(Class<?> clazz, String name, Class<?>... parameterTypes) {

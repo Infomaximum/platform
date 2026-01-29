@@ -114,6 +114,7 @@ public class PlatformStartStop {
             if (querySystem != null) {
                 executeQuerySystem(databaseComponent, querySystem);
             }
+            component.onStopped();
             componentEventService.pushEventOnStopped(platform.getCluster().node, component.getRuntimeComponentInfo());
             componentEventService.pushEventOnUnavailable(platform.getCluster().node, component.getRuntimeComponentInfo());
         }
