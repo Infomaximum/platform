@@ -16,17 +16,16 @@ import com.infomaximum.platform.exception.PlatformException;
 import com.infomaximum.platform.sdk.dbprovider.ComponentDBProvider;
 import com.infomaximum.platform.sdk.exception.GeneralExceptionBuilder;
 import com.infomaximum.platform.sdk.remote.QueryRemotes;
-import com.infomaximum.platform.sdk.remote.component.ComponentEventListenerService;
-import com.infomaximum.platform.sdk.remote.node.UpdateNodeConnectService;
 import com.infomaximum.platform.sdk.struct.ClusterContext;
 import com.infomaximum.platform.sdk.struct.querypool.QuerySystem;
 import com.infomaximum.platform.sdk.subscription.GraphQLSubscribeEvent;
+import com.infomaximum.platform.service.ComponentEventQueue;
 import org.reflections.Reflections;
 
 import java.util.HashSet;
 import java.util.Set;
 
-public abstract class Component extends com.infomaximum.cluster.struct.Component {
+public abstract class Component extends com.infomaximum.cluster.struct.Component implements ComponentEvent {
 
     protected DBProvider dbProvider;
     protected DomainObjectSource domainObjectSource;
@@ -36,6 +35,10 @@ public abstract class Component extends com.infomaximum.cluster.struct.Component
 
     private GraphQLSubscribeEvent graphQLSubscribeEvent;
     private RControllerGraphQLExecutorImpl rControllerGraphQLExecutor;
+
+    private volatile ComponentEventQueue componentEventQueue;
+
+    private volatile boolean isStarted = false;
 
     protected DBProvider initDBProvider() throws PlatformException {
         if (dbProvider != null) {
@@ -72,14 +75,6 @@ public abstract class Component extends com.infomaximum.cluster.struct.Component
         return null;
     }
 
-    public UpdateNodeConnectService getNodeConnectService() {
-        return Platform.get().getNodeConnectService();
-    }
-
-    public ComponentEventListenerService getComponentEventListenerService() {
-        return Platform.get().getComponentEventListenerService();
-    }
-
     public QuerySystem<Void> onInstall() {
         return null;
     }
@@ -109,8 +104,19 @@ public abstract class Component extends com.infomaximum.cluster.struct.Component
         } catch (DatabaseException e) {
             throw GeneralExceptionBuilder.buildDatabaseException(e);
         }
+    }
 
-        this.graphQLSubscribeEvent = new GraphQLSubscribeEvent(this);
+    public void onStarted() {
+        super.start();
+        queryRemotes.assembleControllers();
+        isStarted = true;
+        if (componentEventQueue != null) {
+            componentEventQueue.executeAll();
+        }
+    }
+
+    public void onStopped() {
+        isStarted = false;
     }
 
     public SchemaService buildSchemaService() {
@@ -131,6 +137,21 @@ public abstract class Component extends com.infomaximum.cluster.struct.Component
         return schema;
     }
 
+    public ComponentEventQueue getComponentEventQueue(Platform platform) {
+        if (componentEventQueue == null) {
+            synchronized (this) {
+                if (componentEventQueue == null) {
+                    this.componentEventQueue = new ComponentEventQueue(platform, this);
+                }
+            }
+        }
+        return componentEventQueue;
+    }
+
+    public boolean isStarted() {
+        return isStarted;
+    }
+
     public void initialize() throws PlatformException {
         if (!getClass().getPackage().getName().equals(getInfo().getUuid())) {
             throw new RuntimeException(getClass() + " is not correspond to uuid: " + getInfo().getUuid());
@@ -142,6 +163,8 @@ public abstract class Component extends com.infomaximum.cluster.struct.Component
         this.domainObjectSource = new DomainObjectSource(dbProvider, true);
 
         this.queryRemotes = new QueryRemotes(this);
+
+        this.graphQLSubscribeEvent = new GraphQLSubscribeEvent(this);
     }
 
     //TODO Ulitin V. Временное решение - после переноса механизма обновления в платформу - убрать

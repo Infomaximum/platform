@@ -1,6 +1,7 @@
 package com.infomaximum.platform;
 
 import com.infomaximum.cluster.Cluster;
+import com.infomaximum.cluster.component.manager.ManagerComponent;
 import com.infomaximum.cluster.graphql.GraphQLEngine;
 import com.infomaximum.cluster.struct.Version;
 import com.infomaximum.platform.control.PlatformStartStop;
@@ -8,17 +9,15 @@ import com.infomaximum.platform.control.PlatformUpgrade;
 import com.infomaximum.platform.exception.ClusterExceptionBuilder;
 import com.infomaximum.platform.exception.PlatformException;
 import com.infomaximum.platform.querypool.QueryPool;
+import com.infomaximum.platform.service.ComponentEventService;
 import com.infomaximum.platform.sdk.graphql.customfield.graphqlquery.GraphQLQueryCustomField;
 import com.infomaximum.platform.sdk.graphql.datafetcher.PlatformDataFetcher;
 import com.infomaximum.platform.sdk.graphql.datafetcher.PlatformDataFetcherExceptionHandler;
 import com.infomaximum.platform.sdk.graphql.fieldconfiguration.TypeGraphQLFieldConfigurationBuilderImpl;
 import com.infomaximum.platform.sdk.graphql.scalartype.GraphQLScalarTypePlatform;
-import com.infomaximum.platform.sdk.remote.component.ComponentEventListenerService;
-import com.infomaximum.platform.sdk.remote.node.UpdateNodeConnectService;
 import com.infomaximum.platform.sdk.struct.ClusterContext;
-import com.infomaximum.platform.service.ComponentEventListenerServiceImpl;
+import com.infomaximum.platform.service.ComponentEventNodeConnect;
 import com.infomaximum.platform.service.LogUpdateNodeConnect;
-import com.infomaximum.platform.service.UpdateNodeConnectServiceImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,51 +35,51 @@ public class Platform implements AutoCloseable {
     private final GraphQLEngine graphQLEngine;
     private final Cluster cluster;
     private final QueryPool queryPool;
-    private final UpdateNodeConnectServiceImpl updateNodeConnectService;
-    private final ComponentEventListenerServiceImpl componentEventListenerService;
+    private final ComponentEventService componentEventService;
 
     private Platform(Builder builder) {
         synchronized (Platform.class) {
             if (instant != null) throw new IllegalStateException();
-
-            this.componentEventListenerService = new ComponentEventListenerServiceImpl();
-            this.updateNodeConnectService = new UpdateNodeConnectServiceImpl();
-            this.updateNodeConnectService.addListener(new LogUpdateNodeConnect());
+            this.componentEventService = new ComponentEventService(this);
+            ComponentEventNodeConnect componentEventNodeConnect = new ComponentEventNodeConnect(componentEventService);
 
             this.uncaughtExceptionHandler = builder.uncaughtExceptionHandler;
             this.graphQLEngine = builder.graphQLEngineBuilder.build();
             this.cluster = builder.clusterBuilder
                     .withContext(new ClusterContext(this, builder.clusterContext))
                     .withExceptionBuilder(new ClusterExceptionBuilder())
-                    .withListenerUpdateConnect(updateNodeConnectService)
+                    .withListenerUpdateConnect(new LogUpdateNodeConnect())
+                    .withListenerUpdateConnect(componentEventNodeConnect)
                     .build();
             this.queryPool = new QueryPool(builder.isVirtualThread, builder.uncaughtExceptionHandler);
-
+            this.cluster.getAnyLocalComponent(ManagerComponent.class)
+                    .getRegisterComponent()
+                    .addListener(componentEventNodeConnect);
             instant = this;
         }
     }
 
     public void install() throws PlatformException {
-        new PlatformUpgrade(this, componentEventListenerService).install();
+        new PlatformUpgrade(this, componentEventService).install();
     }
 
     public void upgrade() throws Exception {
-        new PlatformUpgrade(this, componentEventListenerService).upgrade();
+        new PlatformUpgrade(this, componentEventService).upgrade();
     }
 
     public void checkBeforeUpgrade() throws Exception {
-        new PlatformUpgrade(this, componentEventListenerService).checkBeforeUpgrade();
+        new PlatformUpgrade(this, componentEventService).checkBeforeUpgrade();
     }
 
     public void start() throws PlatformException {
         //Старт cluster с подключением удаленных нод
         cluster.start();
 
-        new PlatformStartStop(this, componentEventListenerService).start(false);
+        new PlatformStartStop(this, componentEventService).start(false);
     }
 
     public void stop() throws PlatformException {
-        new PlatformStartStop(this, componentEventListenerService).stop(false);
+        new PlatformStartStop(this, componentEventService).stop(false);
     }
 
     public Thread.UncaughtExceptionHandler getUncaughtExceptionHandler() {
@@ -97,14 +96,6 @@ public class Platform implements AutoCloseable {
 
     public QueryPool getQueryPool() {
         return queryPool;
-    }
-
-    public UpdateNodeConnectService getNodeConnectService() {
-        return updateNodeConnectService;
-    }
-
-    public ComponentEventListenerService getComponentEventListenerService() {
-        return componentEventListenerService;
     }
 
     @Override

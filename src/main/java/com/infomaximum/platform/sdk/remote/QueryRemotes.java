@@ -25,10 +25,12 @@ public class QueryRemotes {
 
     public QueryRemotes(Component component) {
         this.component = component;
+        this.queryRemoteControllers = new HashMap<>();
+    }
 
+    public void assembleControllers() {
         //Собираем remoteController'ы
         try {
-            this.queryRemoteControllers = new HashMap<>();
             for (Class<? extends QueryRemoteController> classRemoteController : new Reflections(component.getInfo().getUuid()).getSubTypesOf(QueryRemoteController.class)) {
                 if (classRemoteController.isInterface()) {
                     //Валидируем интерфейс
