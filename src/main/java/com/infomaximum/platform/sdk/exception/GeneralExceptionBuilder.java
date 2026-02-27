@@ -25,6 +25,7 @@ public class GeneralExceptionBuilder {
     private static final String INVALID_VALUE_CODE = "invalid_value";
     public static final String ACCESS_DENIED_CODE = "access_denied";
     private static final String OBLIGATORY_PARAM = "obligatory_param";
+    public static final String IDEMPOTENCY_COLLISION = "idempotency_collision";
 
     private GeneralExceptionBuilder() {
     }
@@ -228,6 +229,10 @@ public class GeneralExceptionBuilder {
 
     public static PlatformException buildTooLargeDataException(String message) {
         return EXCEPTION_FACTORY.build("too_large_data", message);
+    }
+
+    public static PlatformException buildIdempotencyCollisionException(String idempotencyKey) {
+        return EXCEPTION_FACTORY.build(IDEMPOTENCY_COLLISION, Map.of("idempotency_key", idempotencyKey));
     }
 
 }

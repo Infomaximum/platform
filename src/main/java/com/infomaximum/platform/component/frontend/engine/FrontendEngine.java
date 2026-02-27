@@ -14,6 +14,7 @@ import com.infomaximum.platform.Platform;
 import com.infomaximum.platform.component.frontend.engine.authorize.RequestAuthorize;
 import com.infomaximum.platform.component.frontend.engine.controller.Controllers;
 import com.infomaximum.platform.component.frontend.engine.filter.FilterGRequest;
+import com.infomaximum.platform.component.frontend.engine.idempotency.IdempotencyKeyStorage;
 import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.GraphQLRequestExecuteServiceDisable;
 import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.GraphQLRequestExecuteService;
 import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.GraphQLRequestExecuteServiceImp;
@@ -59,6 +60,7 @@ public class FrontendEngine implements AutoCloseable {
     private final Controllers controllers;
     private final boolean isGraphQLDisabled;
     private final IntrospectionChecker introspectionChecker;
+    private final IdempotencyKeyStorage idempotencyKeyStorage;
 
     private FrontendEngine(Builder builder) {
         this.builder = builder;
@@ -107,6 +109,7 @@ public class FrontendEngine implements AutoCloseable {
             builder.prometheusMetricRegistry.register();
         }
 
+        this.idempotencyKeyStorage = new IdempotencyKeyStorage(component);
         this.controllers = new Controllers(this);
         this.isGraphQLDisabled = builder.isGraphQLDisabled;
         graphQLEngine.setIntrospectionDisabled(builder.isGraphQlIntrospectionDisabled);
@@ -168,6 +171,10 @@ public class FrontendEngine implements AutoCloseable {
 
     public StatisticService getStatisticService() {
         return statisticService;
+    }
+
+    public IdempotencyKeyStorage getIdempotencyKeyStorage() {
+        return idempotencyKeyStorage;
     }
 
     @Override
