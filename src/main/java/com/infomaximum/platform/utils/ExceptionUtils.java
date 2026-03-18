@@ -5,6 +5,8 @@ import com.infomaximum.platform.exception.runtime.PlatformRuntimeException;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.CompletionException;
 
 public class ExceptionUtils {
 
@@ -15,6 +17,23 @@ public class ExceptionUtils {
             return (RuntimeException) throwable;
         } else {
             return new RuntimeException(throwable);
+        }
+    }
+
+    public static Optional<PlatformException> extractPlatformException(Throwable throwable) {
+        if (throwable instanceof PlatformException platformException) {
+            return Optional.of(platformException);
+        } else if (throwable instanceof PlatformRuntimeException platformRuntimeException) {
+            return Optional.of(platformRuntimeException.getPlatformException());
+        } else if (throwable instanceof CompletionException completionException) {
+            Throwable causeThrowable = completionException.getCause();
+            if (causeThrowable != null) {
+                return extractPlatformException(causeThrowable);
+            } else {
+                return Optional.empty();
+            }
+        } else {
+            return Optional.empty();
         }
     }
 

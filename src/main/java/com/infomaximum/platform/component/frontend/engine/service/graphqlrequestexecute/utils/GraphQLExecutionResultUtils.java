@@ -22,6 +22,7 @@ import net.minidev.json.JSONObject;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class GraphQLExecutionResultUtils {
@@ -35,21 +36,17 @@ public class GraphQLExecutionResultUtils {
 
         Map<String, Integer> errors = new HashMap<>();
         for (GraphQLError graphQLError : executionResult.getErrors()) {
-            if (!(graphQLError instanceof ExceptionWhileDataFetching)) {
+            if (!(graphQLError instanceof ExceptionWhileDataFetching exceptionWhileDataFetching)) {
                 continue;
             }
-            ExceptionWhileDataFetching exceptionWhileDataFetching = (ExceptionWhileDataFetching) graphQLError;
             Throwable exception = exceptionWhileDataFetching.getException();
 
-            PlatformException platformException;
-            if (exception instanceof PlatformException) {
-                platformException = (PlatformException) exception;
-            } else if (exception instanceof PlatformRuntimeException platformRuntimeException) {
-                platformException = platformRuntimeException.getPlatformException();
-            } else {
+            Optional<PlatformException> extractPlatformException = ExceptionUtils.extractPlatformException(exception);
+            if (extractPlatformException.isEmpty()) {
                 uncaughtExceptionHandler.uncaughtException(Thread.currentThread(), exception);
                 return null;
             }
+            PlatformException platformException = extractPlatformException.get();
 
             if (platformException.getCode().equals(GeneralExceptionBuilder.ACCESS_DENIED_CODE)) {
                 String path = "/" + graphQLError.getPath().stream()
