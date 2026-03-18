@@ -38,17 +38,20 @@ public class GraphQLExecutionResultUtils {
             if (!(graphQLError instanceof ExceptionWhileDataFetching)) {
                 continue;
             }
-
             ExceptionWhileDataFetching exceptionWhileDataFetching = (ExceptionWhileDataFetching) graphQLError;
             Throwable exception = exceptionWhileDataFetching.getException();
-            if (!(exception instanceof PlatformRuntimeException)) {
+
+            PlatformException platformException;
+            if (exception instanceof PlatformException) {
+                platformException = (PlatformException) exception;
+            } else if (exception instanceof PlatformRuntimeException platformRuntimeException) {
+                platformException = platformRuntimeException.getPlatformException();
+            } else {
                 uncaughtExceptionHandler.uncaughtException(Thread.currentThread(), exception);
                 return null;
             }
-            PlatformRuntimeException subsystemRuntimeException = (PlatformRuntimeException) exception;
-            PlatformException subsystemException = subsystemRuntimeException.getPlatformException();
 
-            if (subsystemException.getCode().equals(GeneralExceptionBuilder.ACCESS_DENIED_CODE)) {
+            if (platformException.getCode().equals(GeneralExceptionBuilder.ACCESS_DENIED_CODE)) {
                 String path = "/" + graphQLError.getPath().stream()
                         .filter(o -> (o instanceof String)).map(o -> (String) o)
                         .collect(Collectors.joining("/"));
