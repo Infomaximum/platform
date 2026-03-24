@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 
 public class ExceptionUtils {
 
@@ -29,12 +30,14 @@ public class ExceptionUtils {
             Throwable causeThrowable = completionException.getCause();
             if (causeThrowable != null) {
                 return extractPlatformException(causeThrowable);
-            } else {
-                return Optional.empty();
             }
-        } else {
-            return Optional.empty();
+        } else if (throwable instanceof ExecutionException executionException) {
+            Throwable causeThrowable = executionException.getCause();
+            if (causeThrowable != null) {
+                return extractPlatformException(causeThrowable);
+            }
         }
+        return Optional.empty();
     }
 
     /**
