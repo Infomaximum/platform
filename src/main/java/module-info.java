@@ -89,7 +89,6 @@ module com.infomaximum.platform {
     exports com.infomaximum.platform.sdk.graphql.datafetcher to com.infomaximum.cluster.graphql;
     exports com.infomaximum.platform.sdk.dbprovider.remote to com.infomaximum.cluster;
     exports com.infomaximum.platform.prometheus;
-    exports com.infomaximum.platform.service;
     exports com.infomaximum.platform.service.detectresource;
     exports com.infomaximum.platform.service.detectresource.resourcemonitor;
     exports com.infomaximum.platform.service.detectresource.resourcemonitor.cpuresourcesmonitor;

@@ -6,11 +6,15 @@ import com.infomaximum.cluster.event.CauseNodeDisconnect;
 import com.infomaximum.platform.Platform;
 import com.infomaximum.platform.sdk.component.Component;
 
+import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+
 import static com.infomaximum.platform.sdk.component.ComponentEvent.*;
 import static com.infomaximum.platform.service.ComponentEventQueue.*;
 
 public class ComponentEventService {
 
+    private static final ConcurrentHashMap<MethodCacheKey, Boolean> methodCache = new ConcurrentHashMap<>();
     private final Platform platform;
 
     public ComponentEventService(Platform platform) {
@@ -78,11 +82,16 @@ public class ComponentEventService {
     }
 
     private static boolean isExistMethodInClass(Class<?> clazz, String name, Class<?>... parameterTypes) {
-        try {
-            clazz.getDeclaredMethod(name, parameterTypes);
-            return true;
-        } catch (NoSuchMethodException e) {
-            return false;
-        }
+        return methodCache.computeIfAbsent(new MethodCacheKey(clazz, name, List.of(parameterTypes)), k -> {
+            try {
+                // getMethod() находит и дефолтные реализации интерфейса ComponentEvent —
+                // isInterface() отсеивает их, оставляя только реальные переопределения
+                return !clazz.getMethod(name, parameterTypes).getDeclaringClass().isInterface();
+            } catch (NoSuchMethodException e) {
+                return false;
+            }
+        });
     }
+
+    private record MethodCacheKey(Class<?> clazz, String methodName, List<Class<?>> parameterTypes) {}
 }

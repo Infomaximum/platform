@@ -17,6 +17,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.util.HashSet;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.infomaximum.platform.sdk.component.ComponentEvent.*;
@@ -47,7 +48,8 @@ public class ComponentEventServiceTest {
     @MethodSource("getArguments")
     public void test(List<Event> expectedEvents,
                      Consumer<ComponentEventService> eventConsumerBeforeOnStarted,
-                     Consumer<ComponentEventService> eventConsumerAfterOnStarted) {
+                     Consumer<ComponentEventService> eventConsumerAfterOnStarted) throws InterruptedException {
+        component.expectEvents(expectedEvents.size());
         eventConsumerBeforeOnStarted.accept(componentEventService);
 
         Assertions.assertThat(component.getComponentEventQueue(platform).executeAll()).isFalse();
@@ -55,14 +57,51 @@ public class ComponentEventServiceTest {
         component.onStarted();
 
         eventConsumerAfterOnStarted.accept(componentEventService);
-        try {
-            Thread.sleep(100); //Необходимо время для выполнения событий в других потоках
-        } catch (InterruptedException e) {
-            Assertions.fail(e);
-        }
+        component.awaitExpectedEvents();
         Assertions.assertThat(component.getExecuteList())
                 .hasSize(expectedEvents.size())
-                .containsExactlyInAnyOrderElementsOf(expectedEvents);
+                .containsExactlyElementsOf(expectedEvents);
+    }
+
+    @Test
+    public void testFifoOrderingOfQueuedEvents() throws InterruptedException {
+        int n = 20;
+        List<Node> nodes = IntStream.range(0, n)
+                .mapToObj(i -> (Node) new RemoteNode())
+                .toList();
+
+        component.expectEvents(n);
+        nodes.forEach(node -> componentEventService.pushEventOnConnect(node));
+
+        component.onStarted();
+        component.awaitExpectedEvents();
+
+        List<Event> expectedEvents = nodes.stream()
+                .map(node -> new Event(METHOD_ON_EVENT_CONNECT, node, null))
+                .toList();
+        Assertions.assertThat(component.getExecuteList())
+                .containsExactlyElementsOf(expectedEvents);
+    }
+
+    @Test
+    public void testEventDeliveredToSubclass() throws InterruptedException {
+        TestEventComponentSubclass subclassComponent = new TestEventComponentSubclass(platform);
+        when(platform.getCluster().getDependencyOrderedComponentsOf(any()))
+                .thenReturn(List.of(subclassComponent));
+
+        subclassComponent.expectEvents(1);
+        subclassComponent.onStarted();
+        componentEventService.pushEventOnConnect(remoteNode);
+        subclassComponent.awaitExpectedEvents();
+
+        Assertions.assertThat(subclassComponent.getExecuteList())
+                .containsExactly(new Event(METHOD_ON_EVENT_CONNECT, remoteNode, null));
+    }
+
+    private static class TestEventComponentSubclass extends TestEventComponent {
+        public TestEventComponentSubclass(Platform platform) {
+            super(platform);
+        }
     }
 
     private static Stream<Arguments> getArguments() {
