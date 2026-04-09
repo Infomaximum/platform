@@ -117,6 +117,10 @@ public abstract class Component extends com.infomaximum.cluster.struct.Component
 
     public void onStopped() {
         isStarted = false;
+        if (componentEventQueue != null) {
+            componentEventQueue.shutdown();
+            componentEventQueue = null;
+        }
     }
 
     public SchemaService buildSchemaService() {

@@ -67,7 +67,7 @@ dependencies {
     api 'com.infomaximum:rdao:1.15.0'
 //    api project(':rdao')
 
-    api 'com.infomaximum:network:1.2.16'
+    api 'com.infomaximum:network:1.2.19'
 //    api project(':network')
 
     implementation 'io.prometheus:prometheus-metrics-core:1.4.3'

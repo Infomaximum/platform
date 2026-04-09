@@ -21,7 +21,7 @@ public class ComponentEventQueue {
     public ComponentEventQueue(Platform platform, Component component) {
         this.platform = platform;
         this.component = component;
-        this.executorsVirtualThreads = Executors.newVirtualThreadPerTaskExecutor();
+        this.executorsVirtualThreads = Executors.newSingleThreadExecutor(Thread.ofVirtual().factory());
         this.lock = new ReentrantLock();
         this.queue = new LinkedList<>();
     }
@@ -33,7 +33,11 @@ public class ComponentEventQueue {
         }
         lock.lock();
         try {
-            addWithOptimize(event);
+            if (component.isStarted()) {
+                push(event.eventRunnable);
+            } else {
+                addWithOptimize(event);
+            }
         } finally {
             lock.unlock();
         }
@@ -63,6 +67,10 @@ public class ComponentEventQueue {
                 platform.getUncaughtExceptionHandler().uncaughtException(Thread.currentThread(), e);
             }
         });
+    }
+
+    public void shutdown() {
+        executorsVirtualThreads.shutdown();
     }
 
     private void addWithOptimize(Event event) {
