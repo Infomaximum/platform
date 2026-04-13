@@ -32,6 +32,9 @@ public class MimeType implements RemoteObject {
 
     public static final MimeType CSV = new MimeType("text/csv");
 
+    public static final MimeType LUA = new MimeType("text/x-lua; charset=UTF-8");
+
+    public static final MimeType SVG = new MimeType("image/svg+xml; charset=UTF-8");
 
     public final String value;
 
