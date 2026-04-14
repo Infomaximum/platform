@@ -18,6 +18,7 @@ import com.infomaximum.platform.sdk.exception.GeneralExceptionBuilder;
 import com.infomaximum.platform.sdk.remote.QueryRemotes;
 import com.infomaximum.platform.sdk.struct.ClusterContext;
 import com.infomaximum.platform.sdk.struct.querypool.QuerySystem;
+import com.infomaximum.platform.sdk.subscription.AsyncOperationResultStore;
 import com.infomaximum.platform.sdk.subscription.GraphQLSubscribeEvent;
 import com.infomaximum.platform.service.ComponentEventQueue;
 import org.reflections.Reflections;
@@ -35,6 +36,8 @@ public abstract class Component extends com.infomaximum.cluster.struct.Component
 
     private GraphQLSubscribeEvent graphQLSubscribeEvent;
     private RControllerGraphQLExecutorImpl rControllerGraphQLExecutor;
+
+    private volatile AsyncOperationResultStore asyncOperationResultStore;
 
     private volatile ComponentEventQueue componentEventQueue;
 
@@ -186,6 +189,17 @@ public abstract class Component extends com.infomaximum.cluster.struct.Component
 
     public final GraphQLSubscribeEvent getGraphQLSubscribeEvent() {
         return graphQLSubscribeEvent;
+    }
+
+    public AsyncOperationResultStore getAsyncOperationResultStore() {
+        if (asyncOperationResultStore == null) {
+            synchronized (this) {
+                if (asyncOperationResultStore == null) {
+                    asyncOperationResultStore = new AsyncOperationResultStore();
+                }
+            }
+        }
+        return asyncOperationResultStore;
     }
 
     private Schema initializeSchema(DBProvider dbProvider) {
