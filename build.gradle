@@ -11,7 +11,7 @@ if (file("${rootProject.projectDir}/gradle/publish-mavencentral.gradle").exists(
 }
 
 group 'com.infomaximum'
-version '0.2.4'
+version '0.2.4p1'
 
 ext.moduleName = 'com.infomaximum.platform'
 
@@ -58,7 +58,7 @@ repositories {
 
 dependencies {
 
-    api 'com.infomaximum:cluster:1.1.16'
+    api 'com.infomaximum:cluster:1.1.17'
 //    api project(':cluster')
 
     api 'com.infomaximum:cluster-graphql:1.1.21'
@@ -67,7 +67,7 @@ dependencies {
     api 'com.infomaximum:rdao:1.15.0'
 //    api project(':rdao')
 
-    api 'com.infomaximum:network:1.2.19'
+    api 'com.infomaximum:network:1.2.18'
 //    api project(':network')
 
     implementation 'io.prometheus:prometheus-metrics-core:1.4.3'
