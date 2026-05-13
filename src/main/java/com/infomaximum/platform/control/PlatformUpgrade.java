@@ -31,6 +31,8 @@ import com.infomaximum.platform.sdk.domainobject.module.ModuleEditable;
 import com.infomaximum.platform.sdk.domainobject.module.ModuleReadable;
 import com.infomaximum.platform.sdk.exception.GeneralExceptionBuilder;
 import com.infomaximum.platform.sdk.struct.querypool.QuerySystem;
+import com.infomaximum.platform.state.SystemState;
+import com.infomaximum.platform.state.internal.SystemStateWriter;
 import com.infomaximum.platform.update.core.ModuleUpdateEntity;
 import com.infomaximum.platform.update.core.UpdateService;
 import com.infomaximum.platform.update.core.UpgradeAction;
@@ -53,12 +55,20 @@ public class PlatformUpgrade {
 
     private final ComponentEventService componentEventService;
 
-    public PlatformUpgrade(Platform platform, ComponentEventService componentEventService) {
+    private final SystemStateWriter systemStateWriter;
+
+    public PlatformUpgrade(Platform platform,
+                           ComponentEventService componentEventService,
+                           SystemStateWriter systemStateWriter) {
         this.platform = platform;
         this.componentEventService = componentEventService;
+        this.systemStateWriter = systemStateWriter;
     }
 
     public void install() throws PlatformException {
+        List<Component> components = platform.getCluster().getDependencyOrderedComponentsOf(Component.class);
+        systemStateWriter.setPhase(SystemState.UPGRADING, components.size());
+        log.info("System state -> UPGRADING (install, total components: {})", components.size());
         try {
             DatabaseComponent databaseSubsystem = platform.getCluster().getAnyLocalComponent(DatabaseComponent.class);
             databaseSubsystem.initialize();
@@ -69,9 +79,9 @@ public class PlatformUpgrade {
                 schema.createTable(new StructEntity(ModuleReadable.class));
 
                 //Регистрируем и устанавливаем модули
-                List<Component> components = platform.getCluster().getDependencyOrderedComponentsOf(Component.class);
                 for (Component component : components) {
                     installComponent(component, transaction);
+                    systemStateWriter.incrementDone();
                 }
             });
 
@@ -82,9 +92,18 @@ public class PlatformUpgrade {
                             .filter(component -> ((Info) component.getInfo()).getVersion() != null)
                             .collect(Collectors.toList())
             );
+        } catch (PlatformException e) {
+            systemStateWriter.markFailed(e);
+            log.error("System state -> FAILED (code={}) during install", e.getCode(), e);
+            throw e;
         } catch (DatabaseException e) {
-            throw GeneralExceptionBuilder.buildDatabaseException(e);
-        } catch (Throwable e) {
+            PlatformException platformException = GeneralExceptionBuilder.buildDatabaseException(e);
+            systemStateWriter.markFailed(platformException);
+            log.error("System state -> FAILED (code={}) during install", platformException.getCode(), e);
+            throw platformException;
+        }  catch (Throwable e) {
+            systemStateWriter.markFailed(null);
+            log.error("System state -> FAILED during install", e);
             throw new RuntimeException(e);
         }
     }
@@ -96,24 +115,41 @@ public class PlatformUpgrade {
 //		Schema schema = Schema.read(provider);
 
         List<Component> modules = platform.getCluster().getDependencyOrderedComponentsOf(Component.class);
-        //Грузим сперва DatabaseSubsystem
-        DatabaseComponent databaseComponent = platform.getCluster().getAnyLocalComponent(DatabaseComponent.class);
-        databaseComponent.initialize();
-        log.info("Database initialized...");
+        systemStateWriter.setPhase(SystemState.UPGRADING, modules.size());
+        log.info("System state -> UPGRADING (total modules: {})", modules.size());
+        try {
+            //Грузим сперва DatabaseSubsystem
+            DatabaseComponent databaseComponent = platform.getCluster().getAnyLocalComponent(DatabaseComponent.class);
+            databaseComponent.initialize();
+            log.info("Database initialized...");
 
-        new DomainObjectSource(databaseComponent.getRocksDBProvider(), true).executeTransactional(transaction -> {
-            ensureSchema(transaction.getDbProvider());
-            updateInstallModules(modules, transaction);
-            removeRedundantModules(modules, transaction);
+            new DomainObjectSource(databaseComponent.getRocksDBProvider(), true).executeTransactional(transaction -> {
+                ensureSchema(transaction.getDbProvider());
+                updateInstallModules(modules, transaction);
+                removeRedundantModules(modules, transaction);
 
-            //После обновления - перечитываем схему
-            for (Component component : platform.getCluster().getDependencyOrderedComponentsOf(Component.class)) {
-                component.reloadSchema(transaction.getDbProvider());
-            }
-        });
+                //После обновления - перечитываем схему
+                for (Component component : platform.getCluster().getDependencyOrderedComponentsOf(Component.class)) {
+                    component.reloadSchema(transaction.getDbProvider());
+                }
+            });
 
-        new PlatformStartStop(platform, componentEventService).start(true);
-        new PlatformStartStop(platform, componentEventService).stop(true);
+            new PlatformStartStop(platform, componentEventService, systemStateWriter).start(true);
+            new PlatformStartStop(platform, componentEventService, systemStateWriter).stop(true);
+        } catch (PlatformException e) {
+            systemStateWriter.markFailed(e);
+            log.error("System state -> FAILED (code={}) during upgrade", e.getCode(), e);
+            throw e;
+        } catch (DatabaseException e) {
+            PlatformException platformException = GeneralExceptionBuilder.buildDatabaseException(e);
+            systemStateWriter.markFailed(platformException);
+            log.error("System state -> FAILED (code={}) during upgrade", platformException.getCode(), e);
+            throw platformException;
+        } catch (Exception e) {
+            systemStateWriter.markFailed(null);
+            log.error("System state -> FAILED during upgrade", e);
+            throw e;
+        }
     }
 
     private void fireOnInstall(DatabaseComponent databaseComponent, List<Component> components) throws PlatformException {
@@ -212,7 +248,7 @@ public class PlatformUpgrade {
                     break;
                 case INSTALL:
                     log.warn("Module " + module.getInfo().getUuid() + " installing");
-                    new PlatformUpgrade(platform, componentEventService).installComponent(module, transaction);
+                    installComponent(module, transaction);
                     componentsForInstall.add(module);
                     break;
                 case UPDATE:
@@ -225,6 +261,10 @@ public class PlatformUpgrade {
                     break;
             }
         }
+        // Реальная единица прогресса — обновляемые модули (классификация выше — миллисекунды).
+        // Сбрасываем total на число модулей, реально требующих UpdateTask.
+        systemStateWriter.setPhase(SystemState.UPGRADING, modulesForUpdate.size());
+        log.info("System state -> UPGRADING (modules to update: {})", modulesForUpdate.size());
         for (Component module : modules) {
             module.initialize();
         }
@@ -263,7 +303,11 @@ public class PlatformUpgrade {
             return;
         }
         UpdateService.beforeUpdateComponents(transaction, updates.toArray(ModuleUpdateEntity[]::new));
-        UpdateService.updateComponents(transaction, updates.toArray(ModuleUpdateEntity[]::new));
+        UpdateService.updateComponents(
+                transaction,
+                systemStateWriter::incrementDone,
+                updates.toArray(ModuleUpdateEntity[]::new)
+        );
     }
 
     private ModuleEditable getModuleByUuid(String uuid, Transaction transaction) throws DatabaseException {

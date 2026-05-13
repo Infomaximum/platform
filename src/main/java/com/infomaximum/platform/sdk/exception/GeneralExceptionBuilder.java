@@ -7,6 +7,7 @@ import com.infomaximum.database.schema.StructEntity;
 import com.infomaximum.platform.exception.ExceptionFactory;
 import com.infomaximum.platform.exception.GeneralExceptionFactory;
 import com.infomaximum.platform.exception.PlatformException;
+import com.infomaximum.platform.state.SystemStateSnapshot;
 
 import java.io.IOException;
 import java.io.Serializable;
@@ -26,6 +27,7 @@ public class GeneralExceptionBuilder {
     public static final String ACCESS_DENIED_CODE = "access_denied";
     private static final String OBLIGATORY_PARAM = "obligatory_param";
     public static final String IDEMPOTENCY_COLLISION = "idempotency_collision";
+    public static final String SYSTEM_NOT_READY = "system_not_ready";
 
     private GeneralExceptionBuilder() {
     }
@@ -233,6 +235,30 @@ public class GeneralExceptionBuilder {
 
     public static PlatformException buildIdempotencyCollisionException(String idempotencyKey) {
         return EXCEPTION_FACTORY.build(IDEMPOTENCY_COLLISION, Map.of("idempotency_key", idempotencyKey));
+    }
+
+    /**
+     * Сигнализирует, что система не готова обслуживать GraphQL-запросы.
+     *
+     * @param snapshot текущий снимок жизненного цикла системы
+     */
+    public static PlatformException buildSystemNotReadyException(SystemStateSnapshot snapshot) {
+        Map<String, Object> params = new HashMap<>();
+        params.put("state", snapshot.state().name());
+
+        Map<String, Object> progress = new HashMap<>();
+        progress.put("done", snapshot.done());
+        progress.put("total", snapshot.total());
+        params.put("progress", progress);
+
+        PlatformException sourceError = snapshot.error();
+        if (sourceError != null) {
+            Map<String, Object> errInfo = new HashMap<>();
+            errInfo.put("code", sourceError.getCode());
+            params.put("error", errInfo);
+        }
+
+        return EXCEPTION_FACTORY.build(SYSTEM_NOT_READY, params);
     }
 
 }

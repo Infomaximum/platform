@@ -178,11 +178,16 @@ public class GraphQLController {
     private ResponseEntity buildResponseEntity(GRequest gRequest, GraphQLResponse<JSONObject> graphQLResponse) {
         HttpStatus httpStatus;
         JSONObject out = new JSONObject();
+        boolean isSystemNotReady = false;
         if (!graphQLResponse.error) {
             httpStatus = HttpStatus.OK;
             out.put(GraphQLRequestExecuteServiceImp.JSON_PROP_DATA, graphQLResponse.data);
         } else {
-            httpStatus = HttpStatus.INTERNAL_SERVER_ERROR;
+            isSystemNotReady = graphQLResponse.data != null
+                    && GeneralExceptionBuilder.SYSTEM_NOT_READY.equals(graphQLResponse.data.get("code"));
+            httpStatus = isSystemNotReady
+                    ? HttpStatus.SERVICE_UNAVAILABLE
+                    : HttpStatus.INTERNAL_SERVER_ERROR;
             out.put(GraphQLRequestExecuteServiceImp.JSON_PROP_ERROR, graphQLResponse.data);
         }
 
@@ -191,6 +196,9 @@ public class GraphQLController {
         headers.setCacheControl("no-cache, no-store, must-revalidate");
         headers.setPragma("no-cache");
         headers.setExpires(0);
+        if (isSystemNotReady) {
+            headers.set(HttpHeaders.RETRY_AFTER, "3");
+        }
 
         String sout = out.toString();
         byte[] bout;
@@ -201,7 +209,8 @@ public class GraphQLController {
             return buildResponseEntity(gRequest, wrapperPE);
         }
 
-        if (gRequest instanceof GRequestHttp gRequestHttp && gRequestHttp.getIdempotencyKey() != null) {
+        // system_not_ready не кешируется по идемпотентному ключу
+        if (gRequest instanceof GRequestHttp gRequestHttp && gRequestHttp.getIdempotencyKey() != null && !isSystemNotReady) {
             putResponseToIdempotencyKeyStorage(gRequestHttp, bout, httpStatus, headers);
         }
 

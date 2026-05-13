@@ -15,6 +15,8 @@ import com.infomaximum.platform.exception.PlatformException;
 import com.infomaximum.platform.sdk.exception.GeneralExceptionBuilder;
 import net.minidev.json.JSONObject;
 import org.junit.jupiter.api.*;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 import java.nio.charset.StandardCharsets;
@@ -23,6 +25,8 @@ import java.util.HashMap;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
@@ -186,5 +190,88 @@ public class GraphQLControllerTest {
         graphQLController.execute(null).get();
 
         Assertions.assertEquals(1, idempotencyKeyStorage.size());
+    }
+
+    /**
+     * Ошибка с кодом system_not_ready должна отдаваться как HTTP 503 + заголовок Retry-After: 3
+     * (а не как 500). Идемпотентный кеш этот ответ не сохраняет, иначе после перехода в READY
+     * клиент получил бы прибитый 503-ответ.
+     */
+    @Test
+    public void systemNotReadyReturns503AndSkipsIdempotencyCache() throws ExecutionException, InterruptedException, PlatformException {
+        when(frontendEngine.getGraphQLRequestExecuteService()).thenReturn(buildSystemNotReadyServiceStub());
+
+        var idempotencyKey = UUID.randomUUID().toString();
+        var requestHttpBuilder = new GRequestHttp.Builder()
+                .withInstantRequest(Instant.now())
+                .withRemoteAddress(new GRequest.RemoteAddress("0.0.0.1"))
+                .withQuery("{query}")
+                .withQueryVariables(new HashMap<>())
+                .withOperationName("operation")
+                .withXTraceId(UUID.randomUUID().toString())
+                .withXRetryCount(0)
+                .withIdempotencyKey(idempotencyKey);
+        when(frontendEngine.getGraphQLRequestBuilder()).thenReturn(request -> new GraphQLRequest(
+                requestHttpBuilder.build(),
+                new ClearUploadFilesImpl(null)));
+
+        ResponseEntity responseEntity = graphQLController.execute(null).get();
+
+        assertThat(responseEntity.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(responseEntity.getHeaders().getFirst(HttpHeaders.RETRY_AFTER)).isEqualTo("3");
+        // Ответ не сохранён в идемпотентном кеше как READY: остаётся стартовый EXECUTE-маркер.
+        IdempotencyResponse cached = idempotencyKeyStorage.get(idempotencyKey, 0);
+        assertThat(cached).isNotNull();
+        assertThat(cached.state()).isEqualTo(IdempotencyResponse.State.EXECUTE);
+    }
+
+    /** Прочие ошибки (не system_not_ready) сохраняют существующее поведение — HTTP 500 без Retry-After. */
+    @Test
+    public void otherErrorsRemainAt500() throws ExecutionException, InterruptedException {
+        when(frontendEngine.getGraphQLRequestExecuteService()).thenReturn(buildAccessDeniedServiceStub());
+
+        var requestHttpBuilder = new GRequestHttp.Builder()
+                .withInstantRequest(Instant.now())
+                .withRemoteAddress(new GRequest.RemoteAddress("0.0.0.1"))
+                .withQuery("{query}")
+                .withQueryVariables(new HashMap<>())
+                .withOperationName("operation")
+                .withXTraceId(UUID.randomUUID().toString())
+                .withXRetryCount(0);
+        when(frontendEngine.getGraphQLRequestBuilder()).thenReturn(request -> new GraphQLRequest(
+                requestHttpBuilder.build(),
+                new ClearUploadFilesImpl(null)));
+
+        ResponseEntity responseEntity = graphQLController.execute(null).get();
+
+        assertThat(responseEntity.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(responseEntity.getHeaders().getFirst(HttpHeaders.RETRY_AFTER)).isNull();
+    }
+
+    private static GraphQLRequestExecuteService buildSystemNotReadyServiceStub() {
+        return buildErrorServiceStub(GeneralExceptionBuilder.SYSTEM_NOT_READY);
+    }
+
+    private static GraphQLRequestExecuteService buildAccessDeniedServiceStub() {
+        return buildErrorServiceStub(GeneralExceptionBuilder.ACCESS_DENIED_CODE);
+    }
+
+    private static GraphQLRequestExecuteService buildErrorServiceStub(String code) {
+        JSONObject error = new JSONObject();
+        error.put("code", code);
+        GraphQLResponse<JSONObject> errorResponse = new GraphQLResponse<>(error, true, null);
+        return new GraphQLRequestExecuteService() {
+            @Override
+            public CompletableFuture<GraphQLResponse> execute(GRequest gRequest) {
+                return CompletableFuture.completedFuture(errorResponse);
+            }
+
+            @Override
+            public GraphQLResponse<JSONObject> buildResponse(GraphQLWrapperPlatformException ex) {
+                JSONObject e = new JSONObject();
+                e.put("code", ex.getPlatformException().getCode());
+                return new GraphQLResponse<>(e, true, ex.getStatistics());
+            }
+        };
     }
 }

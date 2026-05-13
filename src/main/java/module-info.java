@@ -36,6 +36,7 @@ module com.infomaximum.platform {
     exports com.infomaximum.platform.sdk.struct.querypool;
     exports com.infomaximum.platform.exception.runtime;
     exports com.infomaximum.platform.exception;
+    exports com.infomaximum.platform.state;
     exports com.infomaximum.platform.sdk.exception;
     exports com.infomaximum.platform.sdk.utils;
     exports com.infomaximum.platform.sdk.iterator;

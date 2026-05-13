@@ -18,6 +18,8 @@ import com.infomaximum.platform.sdk.context.source.impl.SourceSystemImpl;
 import com.infomaximum.platform.sdk.domainobject.module.ModuleReadable;
 import com.infomaximum.platform.sdk.exception.GeneralExceptionBuilder;
 import com.infomaximum.platform.sdk.struct.querypool.QuerySystem;
+import com.infomaximum.platform.state.SystemState;
+import com.infomaximum.platform.state.internal.SystemStateWriter;
 import com.infomaximum.rocksdb.RocksDBProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,9 +36,14 @@ public class PlatformStartStop {
 
     private final ComponentEventService componentEventService;
 
-    public PlatformStartStop(Platform platform, ComponentEventService componentEventService) {
+    private final SystemStateWriter systemStateWriter;
+
+    public PlatformStartStop(Platform platform,
+                             ComponentEventService componentEventService,
+                             SystemStateWriter systemStateWriter) {
         this.platform = platform;
         this.componentEventService = componentEventService;
+        this.systemStateWriter = systemStateWriter;
     }
 
     /**
@@ -74,15 +81,27 @@ public class PlatformStartStop {
                         return 0;
                     }
                 }).toList();
-        for (Component component : componentList) {
-            QuerySystem<Void> querySystem = component.onStart();
-            if (querySystem != null) {
-                executeQuerySystem(databaseComponent, querySystem);
+        systemStateWriter.setPhase(SystemState.STARTING, componentList.size());
+        log.info("System state -> STARTING (total components: {})", componentList.size());
+        try {
+            for (Component component : componentList) {
+                QuerySystem<Void> querySystem = component.onStart();
+                if (querySystem != null) {
+                    executeQuerySystem(databaseComponent, querySystem);
+                }
+                component.onStarted();
+                componentEventService.pushEventOnStarted(platform.getCluster().node, component.getRuntimeComponentInfo());
+                componentEventService.pushEventOnAvailable(platform.getCluster().node, component.getRuntimeComponentInfo());
+                systemStateWriter.incrementDone();
             }
-            component.onStarted();
-            componentEventService.pushEventOnStarted(platform.getCluster().node, component.getRuntimeComponentInfo());
-            componentEventService.pushEventOnAvailable(platform.getCluster().node, component.getRuntimeComponentInfo());
+        } catch (PlatformException e) {
+            // любая доменная ошибка в фазе старта переводит систему в FAILED.
+            systemStateWriter.markFailed(e);
+            log.error("System state -> FAILED (code={}) during STARTING", e.getCode(), e);
+            throw e;
         }
+        systemStateWriter.markReady();
+        log.info("System state -> READY");
     }
 
     /**
@@ -108,15 +127,25 @@ public class PlatformStartStop {
                 return 0;
             }
         });
+        systemStateWriter.setPhase(SystemState.STOPPING, reverseDependencyOrderedComponents.size());
+        log.info("System state -> STOPPING (total components: {})", reverseDependencyOrderedComponents.size());
         DatabaseComponent databaseComponent = platform.getCluster().getAnyLocalComponent(DatabaseComponent.class);
-        for (Component component : reverseDependencyOrderedComponents) {
-            QuerySystem<Void> querySystem = component.onStop();
-            if (querySystem != null) {
-                executeQuerySystem(databaseComponent, querySystem);
+        try {
+            for (Component component : reverseDependencyOrderedComponents) {
+                QuerySystem<Void> querySystem = component.onStop();
+                if (querySystem != null) {
+                    executeQuerySystem(databaseComponent, querySystem);
+                }
+                component.onStopped();
+                componentEventService.pushEventOnStopped(platform.getCluster().node, component.getRuntimeComponentInfo());
+                componentEventService.pushEventOnUnavailable(platform.getCluster().node, component.getRuntimeComponentInfo());
+                systemStateWriter.incrementDone();
             }
-            component.onStopped();
-            componentEventService.pushEventOnStopped(platform.getCluster().node, component.getRuntimeComponentInfo());
-            componentEventService.pushEventOnUnavailable(platform.getCluster().node, component.getRuntimeComponentInfo());
+        } catch (PlatformException e) {
+            // любая доменная ошибка в фазе остановки переводит систему в FAILED.
+            systemStateWriter.markFailed(e);
+            log.error("System state -> FAILED (code={}) during STOPPING", e.getCode(), e);
+            throw e;
         }
     }
 

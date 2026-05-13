@@ -10,6 +10,8 @@ import com.infomaximum.platform.exception.ClusterExceptionBuilder;
 import com.infomaximum.platform.exception.PlatformException;
 import com.infomaximum.platform.querypool.QueryPool;
 import com.infomaximum.platform.service.ComponentEventService;
+import com.infomaximum.platform.state.SystemStateSnapshot;
+import com.infomaximum.platform.state.internal.SystemStateWriter;
 import com.infomaximum.platform.sdk.graphql.customfield.graphqlquery.GraphQLQueryCustomField;
 import com.infomaximum.platform.sdk.graphql.datafetcher.PlatformDataFetcher;
 import com.infomaximum.platform.sdk.graphql.datafetcher.PlatformDataFetcherExceptionHandler;
@@ -36,10 +38,12 @@ public class Platform implements AutoCloseable {
     private final Cluster cluster;
     private final QueryPool queryPool;
     private final ComponentEventService componentEventService;
+    private final SystemStateWriter systemStateWriter;
 
     private Platform(Builder builder) {
         synchronized (Platform.class) {
             if (instant != null) throw new IllegalStateException();
+            this.systemStateWriter = new SystemStateWriter();
             this.componentEventService = new ComponentEventService(this);
             ComponentEventNodeConnect componentEventNodeConnect = new ComponentEventNodeConnect(componentEventService);
 
@@ -60,26 +64,26 @@ public class Platform implements AutoCloseable {
     }
 
     public void install() throws PlatformException {
-        new PlatformUpgrade(this, componentEventService).install();
+        new PlatformUpgrade(this, componentEventService, systemStateWriter).install();
     }
 
     public void upgrade() throws Exception {
-        new PlatformUpgrade(this, componentEventService).upgrade();
+        new PlatformUpgrade(this, componentEventService, systemStateWriter).upgrade();
     }
 
     public void checkBeforeUpgrade() throws Exception {
-        new PlatformUpgrade(this, componentEventService).checkBeforeUpgrade();
+        new PlatformUpgrade(this, componentEventService, systemStateWriter).checkBeforeUpgrade();
     }
 
     public void start() throws PlatformException {
         //Старт cluster с подключением удаленных нод
         cluster.start();
 
-        new PlatformStartStop(this, componentEventService).start(false);
+        new PlatformStartStop(this, componentEventService, systemStateWriter).start(false);
     }
 
     public void stop() throws PlatformException {
-        new PlatformStartStop(this, componentEventService).stop(false);
+        new PlatformStartStop(this, componentEventService, systemStateWriter).stop(false);
     }
 
     public Thread.UncaughtExceptionHandler getUncaughtExceptionHandler() {
@@ -96,6 +100,13 @@ public class Platform implements AutoCloseable {
 
     public QueryPool getQueryPool() {
         return queryPool;
+    }
+
+    /**
+     * Возвращает текущий снимок жизненного цикла системы.
+     */
+    public SystemStateSnapshot getSystemState() {
+        return systemStateWriter.snapshot();
     }
 
     @Override
