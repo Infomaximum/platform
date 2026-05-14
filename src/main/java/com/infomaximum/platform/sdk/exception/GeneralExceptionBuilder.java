@@ -41,32 +41,27 @@ public class GeneralExceptionBuilder {
     }
 
     public static PlatformException buildNotFoundDomainObjectException(Class<? extends DomainObject> clazz, Long id) {
-        return EXCEPTION_FACTORY.build(NOT_FOUND_DOMAIN_OBJECT_CODE, new HashMap<String, Object>() {{
-            put("type", Schema.getEntity(clazz).getName());
-            put("id", id);
-        }});
+        Map<String, Object> params = new HashMap<>();
+        params.put("type", Schema.getEntity(clazz).getName());
+        params.put("id", id);
+        return EXCEPTION_FACTORY.build(NOT_FOUND_DOMAIN_OBJECT_CODE, params);
     }
 
     public static PlatformException buildNotFoundDomainObjectException(Class<? extends DomainObject> clazz, int fieldNumber, Object fieldValue) {
-        StructEntity entity = Schema.getEntity(clazz);
-        return EXCEPTION_FACTORY.build(NOT_FOUND_DOMAIN_OBJECT_CODE, new HashMap<String, Object>() {{
-            put("type", entity.getName());
-            put("field_name", entity.getField(fieldNumber).getName());
-            put("field_value", fieldValue);
-        }});
+        return EXCEPTION_FACTORY.build(NOT_FOUND_DOMAIN_OBJECT_CODE, buildParams(clazz, fieldNumber, fieldValue));
     }
 
     public static PlatformException buildDomainObjectAlreadyExistsException(Class<? extends DomainObject> clazz, Long id) {
-        return EXCEPTION_FACTORY.build("domain_object_already_exists", new HashMap<String, Object>() {{
-            put("type", Schema.getEntity(clazz).getName());
-            put("id", id);
-        }});
+        Map<String, Object> params = new HashMap<>();
+        params.put("type", Schema.getEntity(clazz).getName());
+        params.put("id", id);
+        return EXCEPTION_FACTORY.build("domain_object_already_exists", params);
     }
 
     public static PlatformException buildNotEmptyDomainObjectException(Class<? extends DomainObject> clazz) {
-        return EXCEPTION_FACTORY.build(NOT_EMPTY_DOMAIN_OBJECT_CODE, new HashMap<String, Object>() {{
-            put("type", Schema.getEntity(clazz).getName());
-        }});
+        Map<String, Object> params = new HashMap<>();
+        params.put("type", Schema.getEntity(clazz).getName());
+        return EXCEPTION_FACTORY.build(NOT_EMPTY_DOMAIN_OBJECT_CODE, params);
     }
 
     public static Map<String, Object> buildParams(Class<? extends DomainObject> clazz, int fieldNumber) {
@@ -153,29 +148,29 @@ public class GeneralExceptionBuilder {
     }
 
     public static PlatformException buildInvalidValueException(String fieldName) {
-        return EXCEPTION_FACTORY.build(INVALID_VALUE_CODE, new HashMap<String, Object>() {{
-            put("field_name", fieldName);
-        }});
+        Map<String, Object> params = new HashMap<>();
+        params.put("field_name", fieldName);
+        return EXCEPTION_FACTORY.build(INVALID_VALUE_CODE, params);
     }
 
     public static PlatformException buildInvalidValueExceptionWithCause(String cause) {
-        return EXCEPTION_FACTORY.build(INVALID_VALUE_CODE, new HashMap<String, Object>() {{
-            put("cause", cause);
-        }});
+        Map<String, Object> params = new HashMap<>();
+        params.put("cause", cause);
+        return EXCEPTION_FACTORY.build(INVALID_VALUE_CODE, params);
     }
 
     public static PlatformException buildInvalidValueException(String fieldName, Serializable fieldValue) {
-        return EXCEPTION_FACTORY.build(INVALID_VALUE_CODE, new HashMap<String, Object>() {{
-            put("field_name", fieldName);
-            put("field_value", fieldValue);
-        }});
+        Map<String, Object> params = new HashMap<>();
+        params.put("field_name", fieldName);
+        params.put("field_value", fieldValue);
+        return EXCEPTION_FACTORY.build(INVALID_VALUE_CODE, params);
     }
 
     public static PlatformException buildInvalidValueException(String fieldName, Serializable fieldValue, String comment) {
-        return EXCEPTION_FACTORY.build(INVALID_VALUE_CODE, comment, new HashMap<String, Object>() {{
-            put("field_name", fieldName);
-            put("field_value", fieldValue);
-        }});
+        Map<String, Object> params = new HashMap<>();
+        params.put("field_name", fieldName);
+        params.put("field_value", fieldValue);
+        return EXCEPTION_FACTORY.build(INVALID_VALUE_CODE, comment, params);
     }
 
     public static PlatformException buildInvalidValueException(Class<? extends DomainObject> clazz, int fieldNumber, Serializable fieldValue) {
