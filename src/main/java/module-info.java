@@ -18,6 +18,7 @@ module com.infomaximum.platform {
     requires java.management;
     requires jdk.management;
     requires com.github.oshi;
+    requires org.checkerframework.checker.qual;
 
     exports com.infomaximum.platform.sdk.context;
     exports com.infomaximum.platform.querypool.iterator;

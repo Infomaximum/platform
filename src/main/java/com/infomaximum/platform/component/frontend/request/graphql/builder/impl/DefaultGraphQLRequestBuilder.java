@@ -63,6 +63,7 @@ public class DefaultGraphQLRequestBuilder implements GraphQLRequestBuilder {
         GRequest.RemoteAddress remoteAddress = new GRequest.RemoteAddress(rawRemoteAddress, endRemoteAddress);
 
         String xTraceId = request.getHeader("X-Trace-Id");
+        String xRequestId = request.getHeader("X-Request-Id");
         String idempotencyKey = request.getHeader("Idempotency-Key");
         Integer xRetryCount = null;
         try {
@@ -176,6 +177,7 @@ public class DefaultGraphQLRequestBuilder implements GraphQLRequestBuilder {
                     .withQueryVariables(queryVariables != null ? queryVariables : new HashMap<>())
                     .withOperationName(operationName)
                     .withXTraceId(xTraceId)
+                    .withXRequestId(xRequestId)
                     .withXRetryCount(xRetryCount)
                     .withIdempotencyKey(idempotencyKey)
                     .withParameters(parameters)

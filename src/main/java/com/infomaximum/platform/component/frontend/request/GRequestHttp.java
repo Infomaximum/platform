@@ -3,6 +3,7 @@ package com.infomaximum.platform.component.frontend.request;
 import com.infomaximum.cluster.core.remote.struct.RemoteObject;
 import com.infomaximum.cluster.graphql.struct.GRequest;
 import jakarta.servlet.http.Cookie;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.io.Serializable;
 import java.net.URI;
@@ -21,6 +22,7 @@ public class GRequestHttp extends GRequest {
 
     private String idempotencyKey;
     private Integer xRetryCount;
+    private String xRequestId;
 
     @Deprecated
     public GRequestHttp(Instant instant, RemoteAddress remoteAddress, String query, HashMap<String, Serializable> queryVariables, String operationName, String xTraceId, HashMap<String, String[]> parameters, HashMap<String, String[]> attributes, Cookie[] cookies, ArrayList<UploadFile> uploadFiles) {
@@ -44,6 +46,7 @@ public class GRequestHttp extends GRequest {
         this.uploadFiles = builder.uploadFiles;
         this.idempotencyKey = builder.idempotencyKey;
         this.xRetryCount = builder.xRetryCount;
+        this.xRequestId = builder.xRequestId;
     }
 
     public String getParameter(String name) {
@@ -95,6 +98,19 @@ public class GRequestHttp extends GRequest {
         return xRetryCount;
     }
 
+    /**
+     * Возвращает идентификатор пользовательского запроса из HTTP-заголовка
+     * {@code X-Request-Id}. Значение сохраняется неизменным между повторными
+     * HTTP-вызовами (retry) от того же клиента; используется для трассировки
+     * цепочки retry в серверных логах.
+     *
+     * @return значение заголовка {@code X-Request-Id} либо {@code null}, если
+     * клиент его не передал.
+     */
+    public @Nullable String getXRequestId() {
+        return xRequestId;
+    }
+
     public static class UploadFile implements RemoteObject {
 
         public final String fieldname;
@@ -123,6 +139,7 @@ public class GRequestHttp extends GRequest {
 
         private Integer xRetryCount;
         private String idempotencyKey;
+        private String xRequestId;
         private HashMap<String, String[]> parameters;
         private HashMap<String, String[]> attributes;
         private Cookie[] cookies;
@@ -165,6 +182,18 @@ public class GRequestHttp extends GRequest {
 
         public GRequestHttp.Builder withIdempotencyKey(String idempotencyKey) {
             this.idempotencyKey = idempotencyKey;
+            return this;
+        }
+
+        /**
+         * Запоминает идентификатор пользовательского запроса из HTTP-заголовка
+         * {@code X-Request-Id} для последующего логирования.
+         *
+         * @param xRequestId значение заголовка либо {@code null}, если заголовка нет.
+         * @return текущий билдер.
+         */
+        public Builder withXRequestId(@Nullable String xRequestId) {
+            this.xRequestId = xRequestId;
             return this;
         }
 

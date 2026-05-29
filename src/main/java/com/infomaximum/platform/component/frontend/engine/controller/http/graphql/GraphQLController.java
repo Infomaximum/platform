@@ -64,9 +64,10 @@ public class GraphQLController {
 
         GRequest gRequest = graphQLRequest.getGRequest();
 
-        log.debug("Request {}, xTraceId: {}, xRetryCount: {}, idempotencyKey: {}, remote address: {}, query: {}",
+        log.debug("Request {}, xTraceId: {}, xRequestId: {}, xRetryCount: {}, idempotencyKey: {}, remote address: {}, query: {}",
                 GRequestUtils.getTraceRequest(gRequest),
                 gRequest.getXTraceId(),
+                gRequest instanceof GRequestHttp gRequestHttp ? gRequestHttp.getXRequestId() : null,
                 gRequest instanceof GRequestHttp gRequestHttp ? gRequestHttp.getXRetryCount() : null,
                 gRequest instanceof GRequestHttp gRequestHttp ? gRequestHttp.getIdempotencyKey() : null,
                 gRequest.getRemoteAddress().endRemoteAddress,
