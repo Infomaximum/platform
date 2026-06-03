@@ -1,9 +1,9 @@
 package com.infomaximum.platform.component.database.remote.info;
 
+import com.infomaximum.cluster.core.remote.struct.RController;
 import com.infomaximum.platform.exception.PlatformException;
-import com.infomaximum.platform.querypool.QueryRemoteController;
 
-public interface RControllerInfo extends QueryRemoteController {
+public interface RControllerInfo extends RController {
 
     String getPlatformGuid() throws PlatformException;
 }

@@ -63,6 +63,15 @@ public class DefaultGraphQLRequestBuilder implements GraphQLRequestBuilder {
         GRequest.RemoteAddress remoteAddress = new GRequest.RemoteAddress(rawRemoteAddress, endRemoteAddress);
 
         String xTraceId = request.getHeader("X-Trace-Id");
+        String xRequestId = request.getHeader("X-Request-Id");
+        String idempotencyKey = request.getHeader("Idempotency-Key");
+        Integer xRetryCount = null;
+        try {
+            xRetryCount = request.getIntHeader("X-Retry-Count");
+            xRetryCount = xRetryCount == -1 ? null : xRetryCount;
+        } catch (NumberFormatException e) {
+            //ignore
+        }
 
         HashMap<String, String[]> parameters = new HashMap<>();
 
@@ -161,16 +170,21 @@ public class DefaultGraphQLRequestBuilder implements GraphQLRequestBuilder {
 
             HashMap<String, String[]> attributes = attributeBuilder.build(request);
 
-            GRequestHttp gRequest = new GRequestHttp(
-                    Instant.now(),
-                    remoteAddress,
-                    query, queryVariables != null ? queryVariables : new HashMap<>(), operationName,
-                    xTraceId,
-                    parameters,
-                    attributes,
-                    request.getCookies(),
-                    uploadFiles
-            );
+            GRequestHttp gRequest = new GRequestHttp.Builder()
+                    .withInstantRequest(Instant.now())
+                    .withRemoteAddress(remoteAddress)
+                    .withQuery(query)
+                    .withQueryVariables(queryVariables != null ? queryVariables : new HashMap<>())
+                    .withOperationName(operationName)
+                    .withXTraceId(xTraceId)
+                    .withXRequestId(xRequestId)
+                    .withXRetryCount(xRetryCount)
+                    .withIdempotencyKey(idempotencyKey)
+                    .withParameters(parameters)
+                    .withAttributes(attributes)
+                    .withCookies(request.getCookies())
+                    .withUploadFiles(uploadFiles)
+                    .build();
 
             return new GraphQLRequest(
                     gRequest,

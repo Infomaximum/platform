@@ -27,12 +27,22 @@ public class UpdateService {
 
     private final static Logger log = LoggerFactory.getLogger(UpdateService.class);
 
+    /**
+     * Обновляет компоненты с прогресс-уведомлением.
+     *
+     * @param onModuleUpdated вызывается после каждого {@link #updateComponent}; может быть
+     *     {@code null}, если вызывающему прогресс не нужен
+     */
     public static void updateComponents(Transaction transaction,
+                                        Runnable onModuleUpdated,
                                         ModuleUpdateEntity... updates) throws DatabaseException {
         Schema.resolve(ModuleEditable.class); //todo V.Bukharkin вынести отсюда
         List<UpdateUtil.ModuleTaskUpdate> moduleTaskUpdates = UpdateUtil.getUpdatesInCorrectOrder(updates);
         for (UpdateUtil.ModuleTaskUpdate moduleTaskUpdate : moduleTaskUpdates) {
             updateComponent(moduleTaskUpdate, transaction);
+            if (onModuleUpdated != null) {
+                onModuleUpdated.run();
+            }
         }
     }
 

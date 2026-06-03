@@ -32,7 +32,7 @@ public class RemotePackerContext implements RemotePacker<Context> {
     }
 
     @Override
-    public Context deserialize(Component component, Class classType, byte[] value) {
+    public Context deserialize(Component component, Class classType, byte[] value) throws Exception {
         throw new RuntimeException("Not implemented");
     }
 }

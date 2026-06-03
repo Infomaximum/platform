@@ -3,6 +3,7 @@ package com.infomaximum.platform.component.frontend.request;
 import com.infomaximum.cluster.core.remote.struct.RemoteObject;
 import com.infomaximum.cluster.graphql.struct.GRequest;
 import jakarta.servlet.http.Cookie;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.io.Serializable;
 import java.net.URI;
@@ -19,6 +20,11 @@ public class GRequestHttp extends GRequest {
 
     private final ArrayList<UploadFile> uploadFiles;
 
+    private String idempotencyKey;
+    private Integer xRetryCount;
+    private String xRequestId;
+
+    @Deprecated
     public GRequestHttp(Instant instant, RemoteAddress remoteAddress, String query, HashMap<String, Serializable> queryVariables, String operationName, String xTraceId, HashMap<String, String[]> parameters, HashMap<String, String[]> attributes, Cookie[] cookies, ArrayList<UploadFile> uploadFiles) {
         super(instant, remoteAddress, query, queryVariables, operationName, xTraceId);
 
@@ -29,6 +35,18 @@ public class GRequestHttp extends GRequest {
         this.cookies = cookies;
 
         this.uploadFiles = uploadFiles;
+    }
+
+    public GRequestHttp(Builder builder) {
+        super(builder.instant, builder.remoteAddress, builder.query, builder.queryVariables, builder.operationName, builder.xTraceId);
+
+        this.parameters = builder.parameters;
+        this.attributes = builder.attributes;
+        this.cookies = builder.cookies;
+        this.uploadFiles = builder.uploadFiles;
+        this.idempotencyKey = builder.idempotencyKey;
+        this.xRetryCount = builder.xRetryCount;
+        this.xRequestId = builder.xRequestId;
     }
 
     public String getParameter(String name) {
@@ -56,8 +74,41 @@ public class GRequestHttp extends GRequest {
         return null;
     }
 
+    public HashMap<String, String[]> getParameters() {
+        return parameters;
+    }
+
+    public HashMap<String, String[]> getAttributes() {
+        return attributes;
+    }
+
+    public Cookie[] getCookies() {
+        return cookies;
+    }
+
     public ArrayList<UploadFile> getUploadFiles() {
         return uploadFiles;
+    }
+
+    public String getIdempotencyKey() {
+        return idempotencyKey;
+    }
+
+    public Integer getXRetryCount() {
+        return xRetryCount;
+    }
+
+    /**
+     * Возвращает идентификатор пользовательского запроса из HTTP-заголовка
+     * {@code X-Request-Id}. Значение сохраняется неизменным между повторными
+     * HTTP-вызовами (retry) от того же клиента; используется для трассировки
+     * цепочки retry в серверных логах.
+     *
+     * @return значение заголовка {@code X-Request-Id} либо {@code null}, если
+     * клиент его не передал.
+     */
+    public @Nullable String getXRequestId() {
+        return xRequestId;
     }
 
     public static class UploadFile implements RemoteObject {
@@ -74,6 +125,100 @@ public class GRequestHttp extends GRequest {
             this.contentType = contentType;
             this.uri = uri;
             this.size = size;
+        }
+    }
+
+    public static class Builder {
+
+        private Instant instant;
+        private RemoteAddress remoteAddress;
+        private String query;
+        private HashMap<String, Serializable> queryVariables;
+        private String operationName;
+        private String xTraceId;
+
+        private Integer xRetryCount;
+        private String idempotencyKey;
+        private String xRequestId;
+        private HashMap<String, String[]> parameters;
+        private HashMap<String, String[]> attributes;
+        private Cookie[] cookies;
+        private ArrayList<UploadFile> uploadFiles;
+
+        public Builder withInstantRequest(Instant instant) {
+            this.instant = instant;
+            return this;
+        }
+
+        public Builder withRemoteAddress(RemoteAddress remoteAddress) {
+            this.remoteAddress = remoteAddress;
+            return this;
+        }
+
+        public Builder withQuery(String query) {
+            this.query = query;
+            return this;
+        }
+
+        public Builder withQueryVariables(HashMap<String, Serializable> queryVariables) {
+            this.queryVariables = queryVariables;
+            return this;
+        }
+
+        public Builder withOperationName(String operationName) {
+            this.operationName = operationName;
+            return this;
+        }
+
+        public Builder withXTraceId(String xTraceId) {
+            this.xTraceId = xTraceId;
+            return this;
+        }
+
+        public Builder withXRetryCount(Integer xRetryCount) {
+            this.xRetryCount = xRetryCount;
+            return this;
+        }
+
+        public GRequestHttp.Builder withIdempotencyKey(String idempotencyKey) {
+            this.idempotencyKey = idempotencyKey;
+            return this;
+        }
+
+        /**
+         * Запоминает идентификатор пользовательского запроса из HTTP-заголовка
+         * {@code X-Request-Id} для последующего логирования.
+         *
+         * @param xRequestId значение заголовка либо {@code null}, если заголовка нет.
+         * @return текущий билдер.
+         */
+        public Builder withXRequestId(@Nullable String xRequestId) {
+            this.xRequestId = xRequestId;
+            return this;
+        }
+
+        public GRequestHttp.Builder withParameters(HashMap<String, String[]> parameters) {
+            this.parameters = parameters;
+            return this;
+        }
+
+        public Builder withAttributes(HashMap<String, String[]> attributes) {
+            this.attributes = attributes;
+            return this;
+        }
+
+        public Builder withCookies(Cookie[] cookies) {
+            this.cookies = cookies;
+            return this;
+        }
+
+        public Builder withUploadFiles(ArrayList<UploadFile> uploadFiles) {
+            this.uploadFiles = uploadFiles;
+            return this;
+        }
+
+        public GRequestHttp build() {
+            return new GRequestHttp(this);
         }
     }
 }

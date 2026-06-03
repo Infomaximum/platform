@@ -1,5 +1,8 @@
 package com.infomaximum.platform.component.frontend.engine.controller.http.graphql;
 
+import com.infomaximum.platform.component.frontend.engine.idempotency.IdempotencyKeyStorage;
+import com.infomaximum.platform.component.frontend.engine.idempotency.IdempotencyResponse;
+import com.infomaximum.platform.component.frontend.engine.idempotency.IdempotencyResponse.State;
 import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.GraphQLRequestExecuteServiceImp;
 import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.struct.GExecutionStatistics;
 import com.infomaximum.cluster.graphql.executor.struct.GSubscriptionPublisher;
@@ -12,10 +15,12 @@ import com.infomaximum.platform.component.frontend.engine.service.graphqlrequest
 import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.utils.GraphQLExecutionResultUtils;
 import com.infomaximum.platform.component.frontend.engine.service.requestcomplete.RequestCompleteCallbackService;
 import com.infomaximum.platform.component.frontend.engine.service.statistic.StatisticService;
+import com.infomaximum.platform.component.frontend.request.GRequestHttp;
 import com.infomaximum.platform.component.frontend.request.graphql.GraphQLRequest;
 import com.infomaximum.platform.component.frontend.utils.GRequestUtils;
 import com.infomaximum.platform.exception.GraphQLWrapperPlatformException;
 import com.infomaximum.platform.exception.PlatformException;
+import com.infomaximum.platform.sdk.exception.GeneralExceptionBuilder;
 import com.infomaximum.platform.sdk.graphql.out.GOutputFile;
 import com.infomaximum.platform.utils.EscapeUtils;
 import com.infomaximum.platform.utils.StringUtils;
@@ -31,7 +36,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -42,9 +46,11 @@ public class GraphQLController {
     private final static Logger log = LoggerFactory.getLogger(GraphQLController.class);
 
     private final FrontendEngine frontendEngine;
+    private final IdempotencyKeyStorage idempotencyKeyStorage;
 
     public GraphQLController(FrontendEngine frontendEngine) {
         this.frontendEngine = frontendEngine;
+        this.idempotencyKeyStorage = frontendEngine.getIdempotencyKeyStorage();
     }
 
     public CompletableFuture<ResponseEntity> execute(HttpServletRequest request) {
@@ -58,9 +64,12 @@ public class GraphQLController {
 
         GRequest gRequest = graphQLRequest.getGRequest();
 
-        log.debug("Request {}, xTraceId: {}, remote address: {}, query: {}",
+        log.debug("Request {}, xTraceId: {}, xRequestId: {}, xRetryCount: {}, idempotencyKey: {}, remote address: {}, query: {}",
                 GRequestUtils.getTraceRequest(gRequest),
                 gRequest.getXTraceId(),
+                gRequest instanceof GRequestHttp gRequestHttp ? gRequestHttp.getXRequestId() : null,
+                gRequest instanceof GRequestHttp gRequestHttp ? gRequestHttp.getXRetryCount() : null,
+                gRequest instanceof GRequestHttp gRequestHttp ? gRequestHttp.getIdempotencyKey() : null,
                 gRequest.getRemoteAddress().endRemoteAddress,
                 gRequest.getQuery().replaceAll("[\\s\\t\\r\\n]+", " ")
         );
@@ -76,6 +85,17 @@ public class GraphQLController {
             }
         }
 
+        if (gRequest instanceof GRequestHttp gRequestHttp) {
+            try {
+                ResponseEntity responseEntity = getResponseFromIdempotencyKeyStorage(gRequestHttp);
+                if (responseEntity != null) {
+                    return CompletableFuture.completedFuture(responseEntity);
+                }
+            } catch (PlatformException e) {
+                GraphQLWrapperPlatformException graphQLWrapperSubsystemException = GraphQLExecutionResultUtils.coercionGraphQLPlatformException(e);
+                return CompletableFuture.completedFuture(buildResponseEntity(gRequest, graphQLWrapperSubsystemException));
+            }
+        }
 
         return frontendEngine.getGraphQLRequestExecuteService().execute(gRequest)
                 .whenComplete((graphQLResponse, throwable) -> {//Встраиваемся в поток, и прокидавыем все(включая ошибки) дальше
@@ -159,11 +179,16 @@ public class GraphQLController {
     private ResponseEntity buildResponseEntity(GRequest gRequest, GraphQLResponse<JSONObject> graphQLResponse) {
         HttpStatus httpStatus;
         JSONObject out = new JSONObject();
+        boolean isSystemNotReady = false;
         if (!graphQLResponse.error) {
             httpStatus = HttpStatus.OK;
             out.put(GraphQLRequestExecuteServiceImp.JSON_PROP_DATA, graphQLResponse.data);
         } else {
-            httpStatus = HttpStatus.INTERNAL_SERVER_ERROR;
+            isSystemNotReady = graphQLResponse.data != null
+                    && GeneralExceptionBuilder.SYSTEM_NOT_READY.equals(graphQLResponse.data.get("code"));
+            httpStatus = isSystemNotReady
+                    ? HttpStatus.SERVICE_UNAVAILABLE
+                    : HttpStatus.INTERNAL_SERVER_ERROR;
             out.put(GraphQLRequestExecuteServiceImp.JSON_PROP_ERROR, graphQLResponse.data);
         }
 
@@ -172,6 +197,9 @@ public class GraphQLController {
         headers.setCacheControl("no-cache, no-store, must-revalidate");
         headers.setPragma("no-cache");
         headers.setExpires(0);
+        if (isSystemNotReady) {
+            headers.set(HttpHeaders.RETRY_AFTER, "3");
+        }
 
         String sout = out.toString();
         byte[] bout;
@@ -180,6 +208,11 @@ public class GraphQLController {
         } catch (PlatformException e) {
             GraphQLWrapperPlatformException wrapperPE = GraphQLExecutionResultUtils.coercionGraphQLPlatformException(e);
             return buildResponseEntity(gRequest, wrapperPE);
+        }
+
+        // system_not_ready не кешируется по идемпотентному ключу
+        if (gRequest instanceof GRequestHttp gRequestHttp && gRequestHttp.getIdempotencyKey() != null && !isSystemNotReady) {
+            putResponseToIdempotencyKeyStorage(gRequestHttp, bout, httpStatus, headers);
         }
 
         GExecutionStatistics statistics = graphQLResponse.statistics;
@@ -205,4 +238,53 @@ public class GraphQLController {
         return new ResponseEntity(bout, headers, httpStatus);
     }
 
+    public ResponseEntity getResponseFromIdempotencyKeyStorage(GRequestHttp gRequestHttp) throws PlatformException {
+        String idempotencyKey = gRequestHttp.getIdempotencyKey();
+        Integer xRetryCount = gRequestHttp.getXRetryCount();
+        if (idempotencyKey == null) {
+            return null;
+        }
+        IdempotencyResponse idempotencyResponse = idempotencyKeyStorage.get(idempotencyKey, xRetryCount);
+        if (idempotencyResponse == null) {
+            idempotencyKeyStorage.put(idempotencyKey,
+                    new IdempotencyResponse(gRequestHttp, State.EXECUTE, null, null, null));
+            return null;
+        }
+        if (!idempotencyResponse.isEqualGRequestHttp(gRequestHttp)) {
+            throw GeneralExceptionBuilder.buildIdempotencyCollisionException(idempotencyKey);
+        }
+        while (idempotencyResponse.state().equals(State.EXECUTE)) {
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                return null;
+            }
+            idempotencyResponse = idempotencyKeyStorage.get(idempotencyKey, xRetryCount);
+            if (idempotencyResponse == null) {
+                idempotencyKeyStorage.put(idempotencyKey,
+                        new IdempotencyResponse(gRequestHttp, State.EXECUTE, null, null, null));
+                return null;
+            }
+        }
+        log.debug("Request {}, idempotencyKey: {}, response: {} - {}",
+                GRequestUtils.getTraceRequest(gRequestHttp),
+                idempotencyKey,
+                idempotencyResponse.httpStatus().value(),
+                "hide(" + idempotencyResponse.responseData().length + " bytes)"
+        );
+        return new ResponseEntity(idempotencyResponse.responseData(), idempotencyResponse.headers(), idempotencyResponse.httpStatus());
+    }
+
+    public void putResponseToIdempotencyKeyStorage(GRequestHttp gRequestHttp,
+                                                   byte[] responseData,
+                                                   HttpStatus httpStatus,
+                                                   HttpHeaders headers) {
+        String idempotencyKey = gRequestHttp.getIdempotencyKey();
+        IdempotencyResponse idempotencyResponse = idempotencyKeyStorage.get(idempotencyKey);
+        if (idempotencyResponse != null && !idempotencyResponse.isEqualGRequestHttp(gRequestHttp)) {
+            return;
+        }
+        idempotencyKeyStorage.put(idempotencyKey,
+                new IdempotencyResponse(gRequestHttp, State.READY, responseData, httpStatus, headers));
+    }
 }

@@ -18,6 +18,7 @@ module com.infomaximum.platform {
     requires java.management;
     requires jdk.management;
     requires com.github.oshi;
+    requires org.checkerframework.checker.qual;
 
     exports com.infomaximum.platform.sdk.context;
     exports com.infomaximum.platform.querypool.iterator;
@@ -28,8 +29,6 @@ module com.infomaximum.platform {
     exports com.infomaximum.platform.sdk.component;
     exports com.infomaximum.platform.sdk.component.version;
     exports com.infomaximum.platform.sdk.remote.packer;
-    exports com.infomaximum.platform.sdk.remote.node;
-    exports com.infomaximum.platform.sdk.remote.component;
     exports com.infomaximum.platform.sdk.threadpool;
     exports com.infomaximum.platform.update.core;
     exports com.infomaximum.platform.sdk.graphql.customfield.graphqlquery;
@@ -38,6 +37,7 @@ module com.infomaximum.platform {
     exports com.infomaximum.platform.sdk.struct.querypool;
     exports com.infomaximum.platform.exception.runtime;
     exports com.infomaximum.platform.exception;
+    exports com.infomaximum.platform.state;
     exports com.infomaximum.platform.sdk.exception;
     exports com.infomaximum.platform.sdk.utils;
     exports com.infomaximum.platform.sdk.iterator;
@@ -72,6 +72,7 @@ module com.infomaximum.platform {
     exports com.infomaximum.platform.component.frontend.engine.network.protocol.graphqltransportws.handler.graphql;
     exports com.infomaximum.platform.component.frontend.engine.network.protocol.graphqltransportws.packet;
     exports com.infomaximum.platform.component.frontend.engine.network.protocol.graphqltransportws.handler.handshake;
+    exports com.infomaximum.platform.component.frontend.engine.idempotency;
     exports com.infomaximum.platform.component.database.remote.backup;
     exports com.infomaximum.platform.component.database.remote.cfconfig;
     exports com.infomaximum.platform.component.database.remote.info;

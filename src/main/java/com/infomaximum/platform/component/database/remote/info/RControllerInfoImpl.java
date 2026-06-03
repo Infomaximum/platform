@@ -1,17 +1,16 @@
 package com.infomaximum.platform.component.database.remote.info;
 
+import com.infomaximum.cluster.core.remote.AbstractRController;
 import com.infomaximum.platform.component.database.DatabaseComponent;
 import com.infomaximum.platform.component.database.info.DBInfo;
 import com.infomaximum.platform.exception.PlatformException;
-import com.infomaximum.platform.querypool.AbstractQueryRController;
-import com.infomaximum.platform.querypool.ResourceProvider;
 
 import java.util.Optional;
 
-public class RControllerInfoImpl extends AbstractQueryRController<DatabaseComponent> implements RControllerInfo {
+public class RControllerInfoImpl extends AbstractRController<DatabaseComponent> implements RControllerInfo {
 
-    public RControllerInfoImpl(DatabaseComponent component, ResourceProvider resources) {
-        super(component, resources);
+    public RControllerInfoImpl(DatabaseComponent component) {
+        super(component);
     }
 
     @Override

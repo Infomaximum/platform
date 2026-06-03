@@ -14,9 +14,11 @@ import com.infomaximum.platform.Platform;
 import com.infomaximum.platform.component.frontend.engine.authorize.RequestAuthorize;
 import com.infomaximum.platform.component.frontend.engine.controller.Controllers;
 import com.infomaximum.platform.component.frontend.engine.filter.FilterGRequest;
+import com.infomaximum.platform.component.frontend.engine.idempotency.IdempotencyKeyStorage;
 import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.GraphQLRequestExecuteServiceDisable;
 import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.GraphQLRequestExecuteService;
 import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.GraphQLRequestExecuteServiceImp;
+import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.GraphQLRequestExecuteServiceNotReady;
 import com.infomaximum.platform.component.frontend.engine.filter.HttpHeadersFilter;
 import com.infomaximum.platform.component.frontend.engine.service.introspection.IntrospectionChecker;
 import com.infomaximum.platform.component.frontend.engine.service.requestcomplete.RequestCompleteCallbackService;
@@ -47,7 +49,7 @@ public class FrontendEngine implements AutoCloseable {
 
     private final GraphQLRequestBuilder graphQLRequestBuilder;
 
-    private GraphQLRequestExecuteService graphQLRequestExecuteService;
+    private volatile GraphQLRequestExecuteService graphQLRequestExecuteService;
 
     private List<FilterGRequest> filterGRequests;
 
@@ -59,6 +61,7 @@ public class FrontendEngine implements AutoCloseable {
     private final Controllers controllers;
     private final boolean isGraphQLDisabled;
     private final IntrospectionChecker introspectionChecker;
+    private final IdempotencyKeyStorage idempotencyKeyStorage;
 
     private FrontendEngine(Builder builder) {
         this.builder = builder;
@@ -107,9 +110,14 @@ public class FrontendEngine implements AutoCloseable {
             builder.prometheusMetricRegistry.register();
         }
 
+        this.idempotencyKeyStorage = new IdempotencyKeyStorage(component);
         this.controllers = new Controllers(this);
         this.isGraphQLDisabled = builder.isGraphQLDisabled;
         graphQLEngine.setIntrospectionDisabled(builder.isGraphQlIntrospectionDisabled);
+
+        this.graphQLRequestExecuteService = isGraphQLDisabled
+                ? new GraphQLRequestExecuteServiceDisable()
+                : new GraphQLRequestExecuteServiceNotReady(platform);
     }
 
     public ComponentExecutorTransportImpl.Builder registerControllers(ComponentExecutorTransportImpl.Builder builder) {
@@ -123,19 +131,44 @@ public class FrontendEngine implements AutoCloseable {
                 );
     }
 
-    public void start() throws NetworkException {
-        graphQLRequestExecuteService = isGraphQLDisabled ?
-                new GraphQLRequestExecuteServiceDisable() :
-                new GraphQLRequestExecuteServiceImp(
-                        component,
-                        platform.getQueryPool(),
-                        graphQLEngine, graphQLSubscribeEngine,
-                        requestAuthorizeBuilder,
-                        introspectionChecker,
-                        platform.getUncaughtExceptionHandler()
-                );
-
+    /**
+     * Поднимает сетевой слой (Jetty).
+     *
+     * @throws NetworkException если поднять сеть не удалось
+     */
+    public void startNetwork() throws NetworkException {
         network = builder.builderNetwork.build();
+    }
+
+    /**
+     * Переключает GraphQL-канал с {@link GraphQLRequestExecuteServiceNotReady}-стаба на полную
+     * реализацию {@link GraphQLRequestExecuteServiceImp}.
+     * <p>
+     * Для GraphQL-disabled конфигурации вызов является no-op — канал остаётся на
+     * {@link GraphQLRequestExecuteServiceDisable}, выставленном в конструкторе.
+     */
+    public void enableGraphQL() {
+        if (!isGraphQLDisabled) {
+            graphQLRequestExecuteService = new GraphQLRequestExecuteServiceImp(
+                    component,
+                    platform.getQueryPool(),
+                    graphQLEngine, graphQLSubscribeEngine,
+                    requestAuthorizeBuilder,
+                    introspectionChecker,
+                    platform.getUncaughtExceptionHandler()
+            );
+        }
+    }
+
+    /**
+     * Возвращает GraphQL-канал на {@link GraphQLRequestExecuteServiceNotReady}-стаб.
+     * <p>
+     * Для GraphQL-disabled конфигурации вызов является no-op.
+     */
+    public void disableGraphQL() {
+        if (!isGraphQLDisabled) {
+            graphQLRequestExecuteService = new GraphQLRequestExecuteServiceNotReady(platform);
+        }
     }
 
     public Network getNetwork() {
@@ -168,6 +201,10 @@ public class FrontendEngine implements AutoCloseable {
 
     public StatisticService getStatisticService() {
         return statisticService;
+    }
+
+    public IdempotencyKeyStorage getIdempotencyKeyStorage() {
+        return idempotencyKeyStorage;
     }
 
     @Override
