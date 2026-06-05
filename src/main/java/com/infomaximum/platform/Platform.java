@@ -15,11 +15,13 @@ import com.infomaximum.platform.state.internal.SystemStateWriter;
 import com.infomaximum.platform.sdk.graphql.customfield.graphqlquery.GraphQLQueryCustomField;
 import com.infomaximum.platform.sdk.graphql.datafetcher.PlatformDataFetcher;
 import com.infomaximum.platform.sdk.graphql.datafetcher.PlatformDataFetcherExceptionHandler;
+import com.infomaximum.platform.sdk.graphql.datafetcher.listener.DataFetcherExceptionListener;
 import com.infomaximum.platform.sdk.graphql.fieldconfiguration.TypeGraphQLFieldConfigurationBuilderImpl;
 import com.infomaximum.platform.sdk.graphql.scalartype.GraphQLScalarTypePlatform;
 import com.infomaximum.platform.sdk.struct.ClusterContext;
 import com.infomaximum.platform.service.ComponentEventNodeConnect;
 import com.infomaximum.platform.service.LogUpdateNodeConnect;
+import org.checkerframework.checker.nullness.qual.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -164,6 +166,19 @@ public class Platform implements AutoCloseable {
 
         public Builder withClusterContext(Object clusterContext) {
             this.clusterContext = clusterContext;
+            return this;
+        }
+
+        /**
+         * Устанавливает слушатель исключений GraphQL-резолверов.
+         * Слушатель получает события только для исключений платформы
+         * (см. {@link DataFetcherExceptionListener}).
+         *
+         * @param listener слушатель исключений резолверов
+         * @return этот построитель
+         */
+        public @NonNull Builder withDataFetcherExceptionListener(@NonNull DataFetcherExceptionListener listener) {
+            this.graphQLEngineBuilder.withDataFetcherExceptionHandler(new PlatformDataFetcherExceptionHandler(listener));
             return this;
         }
 
