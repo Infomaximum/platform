@@ -26,6 +26,8 @@ import com.infomaximum.platform.utils.EscapeUtils;
 import com.infomaximum.platform.utils.StringUtils;
 import jakarta.servlet.http.HttpServletRequest;
 import net.minidev.json.JSONObject;
+import org.checkerframework.checker.nullness.qual.NonNull;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.eclipse.jetty.server.Request;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,6 +41,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 public class GraphQLController {
@@ -131,6 +135,7 @@ public class GraphQLController {
                             header.setPragma("no-cache");
                             header.setExpires(0);
                         }
+                        applyResponseAppendix(header, gRequest);
 
                         //Помечаем инфу для сервиса сбора статистики
                         request.setAttribute(StatisticService.ATTRIBUTE_DOWNLOAD_FILE_SIZE, fileSize);
@@ -200,6 +205,7 @@ public class GraphQLController {
         if (isSystemNotReady) {
             headers.set(HttpHeaders.RETRY_AFTER, "3");
         }
+        applyResponseAppendix(headers, gRequest);
 
         String sout = out.toString();
         byte[] bout;
@@ -236,6 +242,30 @@ public class GraphQLController {
         }
 
         return new ResponseEntity(bout, headers, httpStatus);
+    }
+
+    /**
+     * Переносит накопленный обработкой запроса слот «намерения ответа» ({@code Set-Cookie}
+     * и дополнительные заголовки из {@link GRequestHttp}) в заголовки HTTP-ответа. Для не-HTTP
+     * запросов и пустого слота — ничего не делает.
+     *
+     * @param headers  заголовки формируемого ответа.
+     * @param gRequest запрос; слот читается, только если это {@link GRequestHttp}.
+     */
+    private static void applyResponseAppendix(@NonNull HttpHeaders headers, @Nullable GRequest gRequest) {
+        if (!(gRequest instanceof GRequestHttp gRequestHttp)) {
+            return;
+        }
+        List<String> setCookies = gRequestHttp.getResponseSetCookies();
+        if (setCookies != null) {
+            for (String setCookie : setCookies) {
+                headers.add(HttpHeaders.SET_COOKIE, setCookie);
+            }
+        }
+        Map<String, String> extraHeaders = gRequestHttp.getResponseHeaders();
+        if (extraHeaders != null) {
+            extraHeaders.forEach(headers::add);
+        }
     }
 
     public ResponseEntity getResponseFromIdempotencyKeyStorage(GRequestHttp gRequestHttp) throws PlatformException {
