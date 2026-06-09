@@ -9,7 +9,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Проверяет слот «намерения ответа» {@link GRequestHttp}: накопление значений {@code Set-Cookie}
- * и дополнительных заголовков, пустое состояние по умолчанию.
+ * и дополнительных заголовков, дедупликацию cookie по имени (last-writer-wins), пустое состояние
+ * по умолчанию.
  */
 class GRequestHttpResponseSlotTest {
 
@@ -32,6 +33,22 @@ class GRequestHttpResponseSlotTest {
 
         List<String> cookies = request.getResponseSetCookies();
         assertThat(cookies).containsExactly("a=1", "b=2");
+    }
+
+    /**
+     * Повторный {@code Set-Cookie} с тем же именем cookie заменяет прежний (last-writer-wins),
+     * а не добавляется вторым: сценарий «продление сессии в auth-фазе, затем удаляющая cookie
+     * на logout» — в ответе остаётся только удаляющая.
+     */
+    @Test
+    void sameNameCookieReplacedLastWins() {
+        GRequestHttp request = new GRequestHttp.Builder().build();
+
+        request.addResponseSetCookie("session=newtoken; Path=/; Max-Age=60; HttpOnly; SameSite=Lax");
+        request.addResponseSetCookie("session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax");
+
+        List<String> cookies = request.getResponseSetCookies();
+        assertThat(cookies).containsExactly("session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax");
     }
 
     /** Дополнительный заголовок переносится с тем же именем и значением. */

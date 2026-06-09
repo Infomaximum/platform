@@ -137,13 +137,36 @@ public class GRequestHttp extends GRequest {
     /**
      * Добавляет в ответ готовое значение заголовка {@code Set-Cookie}.
      *
+     * <p>Дедупликация по имени cookie с семантикой last-writer-wins: если в слоте уже есть
+     * {@code Set-Cookie} с тем же именем cookie, он заменяется новым значением, а не добавляется
+     * второй. Так в одном ответе на одну cookie приходится максимум одна директива (корректная
+     * HTTP-семантика), и поздняя запись побеждает раннюю.
+     *
      * @param setCookieValue значение заголовка {@code Set-Cookie}.
      */
     public void addResponseSetCookie(@NonNull String setCookieValue) {
         if (responseSetCookies == null) {
             responseSetCookies = new ArrayList<>(2);
         }
+        String cookieName = cookieName(setCookieValue);
+        for (int i = 0; i < responseSetCookies.size(); i++) {
+            if (cookieName.equals(cookieName(responseSetCookies.get(i)))) {
+                responseSetCookies.set(i, setCookieValue);
+                return;
+            }
+        }
         responseSetCookies.add(setCookieValue);
+    }
+
+    /**
+     * Извлекает имя cookie из значения заголовка {@code Set-Cookie} — часть до первого {@code =}
+     * (имя cookie не может содержать {@code =}). Используется для дедупликации записей по имени.
+     * Сравнение имён регистрозависимое: все cookie в слоте пишутся под фиксированными именами,
+     * расхождения в регистре одного имени не возникает.
+     */
+    private static String cookieName(String setCookieValue) {
+        int eq = setCookieValue.indexOf('=');
+        return eq < 0 ? setCookieValue.trim() : setCookieValue.substring(0, eq).trim();
     }
 
     /**
