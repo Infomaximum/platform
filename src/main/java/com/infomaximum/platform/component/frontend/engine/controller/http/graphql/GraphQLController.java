@@ -9,6 +9,7 @@ import com.infomaximum.cluster.graphql.executor.struct.GSubscriptionPublisher;
 import com.infomaximum.cluster.graphql.struct.GRequest;
 import com.infomaximum.cluster.graphql.subscription.SingleSubscriber;
 import com.infomaximum.platform.component.frontend.engine.FrontendEngine;
+import com.infomaximum.platform.component.frontend.engine.download.DownloadStore;
 import com.infomaximum.platform.component.frontend.engine.filter.FilterGRequest;
 import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.GraphQLRequestExecuteService;
 import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.struct.GraphQLResponse;
@@ -49,15 +50,35 @@ public class GraphQLController {
 
     private final static Logger log = LoggerFactory.getLogger(GraphQLController.class);
 
+    /** Параметр запроса с токеном скачивания (GET-навигация по токену вместо CSRF-заголовка). */
+    private final static String PARAM_DOWNLOAD_TOKEN = "downloadToken";
+    /** Заголовок ответа HEAD с токеном подготовленного файла. */
+    private final static String HEADER_DOWNLOAD_TOKEN = "X-Download-Token";
+
     private final FrontendEngine frontendEngine;
     private final IdempotencyKeyStorage idempotencyKeyStorage;
+    private final DownloadStore downloadStore;
 
     public GraphQLController(FrontendEngine frontendEngine) {
         this.frontendEngine = frontendEngine;
         this.idempotencyKeyStorage = frontendEngine.getIdempotencyKeyStorage();
+        this.downloadStore = frontendEngine.getDownloadStore();
     }
 
     public CompletableFuture<ResponseEntity> execute(HttpServletRequest request) {
+        // Отдача ранее подготовленного файла по токену (GET-навигация). Перехват ДО разбора
+        // запроса и цикла CSRF-фильтра: операция повторно не исполняется, авторизует токен.
+        if (request != null) {
+            String downloadToken = request.getParameter(PARAM_DOWNLOAD_TOKEN);
+            if (downloadToken != null) {
+                GOutputFile stored = downloadStore.take(downloadToken);
+                if (stored == null) {
+                    return CompletableFuture.completedFuture(ResponseEntity.notFound().build());
+                }
+                return CompletableFuture.completedFuture(buildFileResponseEntity(stored, request, null));
+            }
+        }
+
         GraphQLRequest graphQLRequest;
         try {
             graphQLRequest = frontendEngine.getGraphQLRequestBuilder().build(request);
@@ -119,54 +140,20 @@ public class GraphQLController {
                                     GraphQLExecutionResultUtils.buildResponse(executionResult, null);
                             return buildResponseEntity(gRequest, graphQLResponse);
                         });
-                    } else if (data instanceof GOutputFile) {
-                        GOutputFile gOutputFile = (GOutputFile) data;
-
-                        long fileSize = gOutputFile.getSize();
-
-                        HttpHeaders header = new HttpHeaders();
-                        header.add("Content-Disposition", "attachment; filename*=UTF-8''" + EscapeUtils.escapeFileNameFromContentDisposition(gOutputFile.fileName));
-                        header.setContentType(MediaType.valueOf(gOutputFile.mimeType.value));
-                        header.setContentLength(fileSize);
-                        if (gOutputFile.cache) {
-                            header.setCacheControl("public, max-age=86400");
-                        } else {
-                            header.setCacheControl("no-cache, no-store, must-revalidate");
-                            header.setPragma("no-cache");
-                            header.setExpires(0);
-                        }
-                        applyResponseAppendix(header, gRequest);
-
-                        //Помечаем инфу для сервиса сбора статистики
-                        request.setAttribute(StatisticService.ATTRIBUTE_DOWNLOAD_FILE_SIZE, fileSize);
-
-                        if (gOutputFile.temp) {
-                            //Добавляем callback, что бы после отдачи файла, его удалить
-                            request.setAttribute(
-                                    RequestCompleteCallbackService.ATTRIBUTE_COMPLETE_REQUEST_CALLBACK,
-                                    new RequestCompleteCallbackService.Callback() {
-                                        @Override
-                                        public void exec(Request request) {
-                                            try {
-                                                Files.delete(Paths.get(gOutputFile.uri));
-                                            } catch (IOException e) {
-                                                log.error("Exception clear temp file", e);//Падать из-за этого не стоит
-                                            }
-                                        }
-                                    }
+                    } else if (data instanceof GOutputFile gOutputFile) {
+                        if (isHead(request)) {
+                            // Подготовка скачивания: кладём файл в store под токен и отдаём только
+                            // метаданные + токен. Тело не пишем (HEAD), temp-файл НЕ удаляем —
+                            // он нужен будущему GET по токену (закрывает двойную генерацию).
+                            String token = downloadStore.put(gOutputFile);
+                            HttpHeaders header = buildFileHeaders(gOutputFile, gRequest);
+                            header.add(HEADER_DOWNLOAD_TOKEN, token);
+                            return CompletableFuture.completedFuture(
+                                    ResponseEntity.ok().headers(header).build()
                             );
                         }
-
-                        Object body;
-                        if (gOutputFile.body != null) {
-                            body = gOutputFile.body;
-                        } else {
-                            Path pathOutputFile = Paths.get(gOutputFile.uri);
-                            body = new PathResource(pathOutputFile);
-                        }
-
                         return CompletableFuture.completedFuture(
-                                new ResponseEntity(body, header, HttpStatus.OK)
+                                buildFileResponseEntity(gOutputFile, request, gRequest)
                         );
                     } else {
                         throw new RuntimeException("Not support type out: " + out);
@@ -242,6 +229,77 @@ public class GraphQLController {
         }
 
         return new ResponseEntity(bout, headers, httpStatus);
+    }
+
+    private static boolean isHead(HttpServletRequest request) {
+        return "HEAD".equalsIgnoreCase(request.getMethod());
+    }
+
+    /**
+     * Собирает заголовки отдачи файла: {@code Content-Disposition: attachment},
+     * тип, длину и кэш-политику; плюс перенос слота «намерения ответа».
+     *
+     * @param gOutputFile отдаваемый файл.
+     * @param gRequest    запрос; {@code null} на пути отдачи по токену (слот не переносится).
+     * @return заголовки ответа.
+     */
+    private HttpHeaders buildFileHeaders(GOutputFile gOutputFile, @Nullable GRequest gRequest) {
+        HttpHeaders header = new HttpHeaders();
+        header.add("Content-Disposition", "attachment; filename*=UTF-8''" + EscapeUtils.escapeFileNameFromContentDisposition(gOutputFile.fileName));
+        header.setContentType(MediaType.valueOf(gOutputFile.mimeType.value));
+        header.setContentLength(gOutputFile.getSize());
+        if (gOutputFile.cache) {
+            header.setCacheControl("public, max-age=86400");
+        } else {
+            header.setCacheControl("no-cache, no-store, must-revalidate");
+            header.setPragma("no-cache");
+            header.setExpires(0);
+        }
+        applyResponseAppendix(header, gRequest);
+        return header;
+    }
+
+    /**
+     * Строит ответ с телом файла: заголовки + тело (из памяти либо потоково с диска),
+     * учёт размера для статистики и удаление temp-файла после отдачи.
+     *
+     * @param gOutputFile отдаваемый файл.
+     * @param request     HTTP-запрос (для атрибутов статистики и callback'а удаления).
+     * @param gRequest    запрос-контекст; {@code null} на пути отдачи по токену.
+     * @return ответ {@code 200} с телом файла.
+     */
+    private ResponseEntity buildFileResponseEntity(GOutputFile gOutputFile, HttpServletRequest request, @Nullable GRequest gRequest) {
+        HttpHeaders header = buildFileHeaders(gOutputFile, gRequest);
+
+        //Помечаем инфу для сервиса сбора статистики
+        request.setAttribute(StatisticService.ATTRIBUTE_DOWNLOAD_FILE_SIZE, gOutputFile.getSize());
+
+        if (gOutputFile.temp) {
+            //Добавляем callback, что бы после отдачи файла, его удалить
+            request.setAttribute(
+                    RequestCompleteCallbackService.ATTRIBUTE_COMPLETE_REQUEST_CALLBACK,
+                    new RequestCompleteCallbackService.Callback() {
+                        @Override
+                        public void exec(Request request) {
+                            try {
+                                Files.delete(Paths.get(gOutputFile.uri));
+                            } catch (IOException e) {
+                                log.error("Exception clear temp file", e);//Падать из-за этого не стоит
+                            }
+                        }
+                    }
+            );
+        }
+
+        Object body;
+        if (gOutputFile.body != null) {
+            body = gOutputFile.body;
+        } else {
+            Path pathOutputFile = Paths.get(gOutputFile.uri);
+            body = new PathResource(pathOutputFile);
+        }
+
+        return new ResponseEntity(body, header, HttpStatus.OK);
     }
 
     /**

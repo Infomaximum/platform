@@ -13,6 +13,7 @@ import com.infomaximum.network.transport.http.builder.filter.BuilderFilter;
 import com.infomaximum.platform.Platform;
 import com.infomaximum.platform.component.frontend.engine.authorize.RequestAuthorize;
 import com.infomaximum.platform.component.frontend.engine.controller.Controllers;
+import com.infomaximum.platform.component.frontend.engine.download.DownloadStore;
 import com.infomaximum.platform.component.frontend.engine.filter.FilterGRequest;
 import com.infomaximum.platform.component.frontend.engine.idempotency.IdempotencyKeyStorage;
 import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.GraphQLRequestExecuteServiceDisable;
@@ -62,6 +63,7 @@ public class FrontendEngine implements AutoCloseable {
     private final boolean isGraphQLDisabled;
     private final IntrospectionChecker introspectionChecker;
     private final IdempotencyKeyStorage idempotencyKeyStorage;
+    private final DownloadStore downloadStore;
 
     private FrontendEngine(Builder builder) {
         this.builder = builder;
@@ -111,6 +113,7 @@ public class FrontendEngine implements AutoCloseable {
         }
 
         this.idempotencyKeyStorage = new IdempotencyKeyStorage(component);
+        this.downloadStore = new DownloadStore(component);
         this.controllers = new Controllers(this);
         this.isGraphQLDisabled = builder.isGraphQLDisabled;
         graphQLEngine.setIntrospectionDisabled(builder.isGraphQlIntrospectionDisabled);
@@ -205,6 +208,10 @@ public class FrontendEngine implements AutoCloseable {
 
     public IdempotencyKeyStorage getIdempotencyKeyStorage() {
         return idempotencyKeyStorage;
+    }
+
+    public DownloadStore getDownloadStore() {
+        return downloadStore;
     }
 
     @Override
