@@ -36,6 +36,8 @@ public class MimeType implements RemoteObject {
 
     public static final MimeType SVG = new MimeType("image/svg+xml; charset=UTF-8");
 
+    public static final MimeType PKG = new MimeType("application/octet-stream");
+
     public final String value;
 
     public MimeType(String value) {

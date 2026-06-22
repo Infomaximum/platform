@@ -24,6 +24,7 @@ public class MimeTypeUtils {
         mimeTypes.put("csv", MimeType.CSV);
         mimeTypes.put("lua", MimeType.LUA);
         mimeTypes.put("svg", MimeType.SVG);
+        mimeTypes.put("pkg", MimeType.PKG);
     }
 
     public static MimeType findAutoMimeType(String fileName) {
