@@ -292,6 +292,8 @@ public class GraphQLRequestExecuteServiceImp implements GraphQLRequestExecuteSer
             } else {
                 throw ExceptionUtils.coercionRuntimeException(dataFetchingThrowable);
             }
+        } else if (errorType == ErrorType.ExecutionAborted) {
+            platformException = GeneralExceptionBuilder.buildGraphQLExecutionAbortedException(graphQLError.getMessage());
         } else {
             throw new RuntimeException("Not support error type: " + graphQLError.getErrorType());
         }
