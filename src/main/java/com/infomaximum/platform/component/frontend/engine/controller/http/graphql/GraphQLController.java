@@ -31,7 +31,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -40,6 +39,9 @@ import java.util.concurrent.CompletableFuture;
 public class GraphQLController {
 
     private final static Logger log = LoggerFactory.getLogger(GraphQLController.class);
+
+    /** Максимальная длина сериализованного GraphQL-ответа в символах. */
+    private final static int MAX_RESPONSE_CHARS = Integer.MAX_VALUE / 3;
 
     private final FrontendEngine frontendEngine;
 
@@ -173,11 +175,14 @@ public class GraphQLController {
         headers.setPragma("no-cache");
         headers.setExpires(0);
 
-        String sout = out.toString();
+        String sout;
         byte[] bout;
         try {
+            sout = StringUtils.toLimitedJsonString(out, MAX_RESPONSE_CHARS);
             bout = StringUtils.getBytesUTF8(sout);
         } catch (PlatformException e) {
+            log.warn("Request {}, response rejected: too large (>= {} chars)",
+                    (gRequest != null) ? GRequestUtils.getTraceRequest(gRequest) : null, MAX_RESPONSE_CHARS);
             GraphQLWrapperPlatformException wrapperPE = GraphQLExecutionResultUtils.coercionGraphQLPlatformException(e);
             return buildResponseEntity(gRequest, wrapperPE);
         }
