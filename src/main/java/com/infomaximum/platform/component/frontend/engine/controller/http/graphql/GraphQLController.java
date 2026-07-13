@@ -54,6 +54,8 @@ public class GraphQLController {
     private final static String PARAM_DOWNLOAD_TOKEN = "downloadToken";
     /** Заголовок ответа HEAD с токеном подготовленного файла. */
     private final static String HEADER_DOWNLOAD_TOKEN = "X-Download-Token";
+    /** Максимальная длина сериализованного GraphQL-ответа в символах. */
+    private final static int MAX_RESPONSE_CHARS = Integer.MAX_VALUE / 3;
 
     private final FrontendEngine frontendEngine;
     private final IdempotencyKeyStorage idempotencyKeyStorage;
@@ -194,11 +196,14 @@ public class GraphQLController {
         }
         applyResponseAppendix(headers, gRequest);
 
-        String sout = out.toString();
+        String sout;
         byte[] bout;
         try {
+            sout = StringUtils.toLimitedJsonString(out, MAX_RESPONSE_CHARS);
             bout = StringUtils.getBytesUTF8(sout);
         } catch (PlatformException e) {
+            log.warn("Request {}, response rejected: too large (>= {} chars)",
+                    (gRequest != null) ? GRequestUtils.getTraceRequest(gRequest) : null, MAX_RESPONSE_CHARS);
             GraphQLWrapperPlatformException wrapperPE = GraphQLExecutionResultUtils.coercionGraphQLPlatformException(e);
             return buildResponseEntity(gRequest, wrapperPE);
         }
