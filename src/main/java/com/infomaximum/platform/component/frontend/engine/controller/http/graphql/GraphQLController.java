@@ -22,6 +22,8 @@ import com.infomaximum.platform.exception.GraphQLWrapperPlatformException;
 import com.infomaximum.platform.exception.PlatformException;
 import com.infomaximum.platform.sdk.exception.GeneralExceptionBuilder;
 import com.infomaximum.platform.sdk.graphql.out.GOutputFile;
+import com.infomaximum.platform.state.SystemState;
+import com.infomaximum.platform.state.SystemStateSnapshot;
 import com.infomaximum.platform.utils.EscapeUtils;
 import com.infomaximum.platform.utils.StringUtils;
 import jakarta.servlet.http.HttpServletRequest;
@@ -54,6 +56,14 @@ public class GraphQLController {
     }
 
     public CompletableFuture<ResponseEntity> execute(HttpServletRequest request) {
+        // Пока система не в фазе READY, отбиваем запрос штатным 503 ДО разбора тела.
+        SystemStateSnapshot systemState = frontendEngine.getSystemState();
+        if (systemState.state() != SystemState.READY) {
+            PlatformException notReady = GeneralExceptionBuilder.buildSystemNotReadyException(systemState);
+            GraphQLWrapperPlatformException wrapped =
+                    GraphQLExecutionResultUtils.coercionGraphQLPlatformException(notReady);
+            return CompletableFuture.completedFuture(buildResponseEntity(null, wrapped));
+        }
         GraphQLRequest graphQLRequest;
         try {
             graphQLRequest = frontendEngine.getGraphQLRequestBuilder().build(request);
