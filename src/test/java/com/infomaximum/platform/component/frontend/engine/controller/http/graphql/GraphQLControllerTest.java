@@ -13,6 +13,8 @@ import com.infomaximum.platform.component.frontend.request.graphql.builder.impl.
 import com.infomaximum.platform.exception.GraphQLWrapperPlatformException;
 import com.infomaximum.platform.exception.PlatformException;
 import com.infomaximum.platform.sdk.exception.GeneralExceptionBuilder;
+import com.infomaximum.platform.state.SystemState;
+import com.infomaximum.platform.state.SystemStateSnapshot;
 import net.minidev.json.JSONObject;
 import org.junit.jupiter.api.*;
 import org.springframework.http.HttpHeaders;
@@ -51,6 +53,8 @@ public class GraphQLControllerTest {
         responseData.put(GraphQLRequestExecuteServiceImp.JSON_PROP_DATA, jsonObject);
         doReturn(null).when(idempotencyKeyStorage).getFromRemote(anyString());
         when(frontendEngine.getFilterGRequests()).thenReturn(null);
+        when(frontendEngine.getSystemState())
+                .thenReturn(new SystemStateSnapshot(SystemState.READY, 0, 0, null));
         when(frontendEngine.getGraphQLRequestExecuteService()).thenReturn(new GraphQLRequestExecuteService() {
             @Override
             public CompletableFuture<GraphQLResponse> execute(GRequest gRequest) {
@@ -246,6 +250,18 @@ public class GraphQLControllerTest {
 
         assertThat(responseEntity.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
         assertThat(responseEntity.getHeaders().getFirst(HttpHeaders.RETRY_AFTER)).isNull();
+    }
+
+    @Test
+    public void skipsBuildAndReturns503WhenSystemNotReady() throws ExecutionException, InterruptedException {
+        when(frontendEngine.getSystemState())
+                .thenReturn(new SystemStateSnapshot(SystemState.STARTING, 1, 3, null));
+
+        ResponseEntity responseEntity = graphQLController.execute(null).get();
+
+        assertThat(responseEntity.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(responseEntity.getHeaders().getFirst(HttpHeaders.RETRY_AFTER)).isEqualTo("3");
+        verify(frontendEngine, never()).getGraphQLRequestBuilder();
     }
 
     private static GraphQLRequestExecuteService buildSystemNotReadyServiceStub() {

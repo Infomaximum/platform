@@ -30,6 +30,7 @@ import com.infomaximum.platform.component.frontend.request.graphql.builder.Graph
 import com.infomaximum.platform.component.frontend.request.graphql.builder.impl.DefaultGraphQLRequestBuilder;
 import com.infomaximum.platform.prometheus.PrometheusMetricRegistry;
 import com.infomaximum.platform.sdk.component.Component;
+import com.infomaximum.platform.state.SystemStateSnapshot;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -176,6 +177,10 @@ public class FrontendEngine implements AutoCloseable {
 
     public Network getNetwork() {
         return network;
+    }
+
+    public SystemStateSnapshot getSystemState() {
+        return platform.getSystemState();
     }
 
     public FrontendMultipartSource getFrontendMiltipartSource() {
