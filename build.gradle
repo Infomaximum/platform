@@ -61,7 +61,7 @@ dependencies {
     api 'com.infomaximum:cluster:1.1.21'
 //    api project(':cluster')
 
-    api 'com.infomaximum:cluster-graphql:1.1.21'
+    api 'com.infomaximum:cluster-graphql:1.1.23'
 //    api project(':cluster-graphql')
 
     api 'com.infomaximum:rdao:1.15.0'
