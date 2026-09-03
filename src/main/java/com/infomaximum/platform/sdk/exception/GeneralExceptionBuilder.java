@@ -105,6 +105,18 @@ public class GeneralExceptionBuilder {
         return EXCEPTION_FACTORY.build("graphql_validation_error", message);
     }
 
+    /**
+     * Ошибка прерывания выполнения GraphQL-запроса при превышении лимита глубины
+     * или сложности (классификация graphql-java {@code ExecutionAborted}).
+     *
+     * @param message исходное сообщение graphql-java
+     *                ({@code maximum query depth/complexity exceeded ...})
+     * @return платформенное исключение с кодом {@code graphql_execution_aborted}
+     */
+    public static PlatformException buildGraphQLExecutionAbortedException(String message) {
+        return EXCEPTION_FACTORY.build("graphql_execution_aborted", message);
+    }
+
     public static PlatformException buildGraphQLIntrospectionDisabledException() {
         return EXCEPTION_FACTORY.build("graphql_introspection_disabled");
     }
