@@ -1,5 +1,6 @@
 package com.infomaximum.platform.component.frontend.engine.controller.http.graphql;
 
+import com.infomaximum.platform.component.frontend.authcontext.UnauthorizedContext;
 import com.infomaximum.platform.component.frontend.engine.idempotency.IdempotencyKeyStorage;
 import com.infomaximum.platform.component.frontend.engine.idempotency.IdempotencyResponse;
 import com.infomaximum.platform.component.frontend.engine.idempotency.IdempotencyResponse.State;
@@ -55,7 +56,7 @@ public class GraphQLController {
     /** Параметр запроса с токеном скачивания (GET-навигация по токену вместо CSRF-заголовка). */
     private final static String PARAM_DOWNLOAD_TOKEN = "downloadToken";
     /** Заголовок ответа HEAD с токеном подготовленного файла. */
-    private final static String HEADER_DOWNLOAD_TOKEN = "X-Download-Token";
+    final static String HEADER_DOWNLOAD_TOKEN = "X-Download-Token";
     /** Максимальная длина сериализованного GraphQL-ответа в символах. */
     private final static int MAX_RESPONSE_CHARS = Integer.MAX_VALUE / 3;
 
@@ -70,16 +71,21 @@ public class GraphQLController {
     }
 
     public CompletableFuture<ResponseEntity> execute(HttpServletRequest request) {
+        boolean head = request != null && isHead(request);
         // Отдача ранее подготовленного файла по токену (GET-навигация). Перехват ДО разбора
         // запроса и цикла CSRF-фильтра: операция повторно не исполняется, авторизует токен.
         if (request != null) {
             String downloadToken = request.getParameter(PARAM_DOWNLOAD_TOKEN);
             if (downloadToken != null) {
                 GOutputFile stored = downloadStore.take(downloadToken);
-                if (stored == null) {
-                    return CompletableFuture.completedFuture(ResponseEntity.notFound().build());
+                if (stored != null) {
+                    return CompletableFuture.completedFuture(buildFileResponseEntity(stored, request, null));
                 }
-                return CompletableFuture.completedFuture(buildFileResponseEntity(stored, request, null));
+                byte[] error = downloadStore.takeError(downloadToken);
+                if (error != null) {
+                    return CompletableFuture.completedFuture(buildDownloadErrorResponseEntity(error));
+                }
+                return CompletableFuture.completedFuture(ResponseEntity.notFound().build());
             }
         }
 
@@ -143,7 +149,7 @@ public class GraphQLController {
                     Object data = out.data;
                     if (data instanceof JSONObject) {
                         return CompletableFuture.completedFuture(
-                                buildResponseEntity(gRequest, out)
+                                withDownloadErrorToken(buildResponseEntity(gRequest, out), head && isAuthorized(out))
                         );
                     } else if (data instanceof GSubscriptionPublisher completionPublisher) {
                         SingleSubscriber singleSubscriber = new SingleSubscriber();
@@ -245,6 +251,48 @@ public class GraphQLController {
         }
 
         return new ResponseEntity(bout, headers, httpStatus);
+    }
+
+    /**
+     * Для HEAD с ошибкой операции кладёт тело ошибки в хранилище скачиваний и добавляет к ответу
+     * {@link #HEADER_DOWNLOAD_TOKEN}: у ответа HEAD нет тела, и клиент забирает ошибку GET-запросом
+     * по токену. Токен одноразовый и зависит от текущего запроса, поэтому добавляется к копии
+     * заголовков и в идемпотентный кеш не попадает.
+     */
+    private ResponseEntity withDownloadErrorToken(ResponseEntity responseEntity, boolean head) {
+        if (!head
+                || !responseEntity.getStatusCode().isError()
+                || !(responseEntity.getBody() instanceof byte[] body)) {
+            return responseEntity;
+        }
+        HttpHeaders headers = new HttpHeaders();
+        headers.putAll(responseEntity.getHeaders());
+        headers.set(HEADER_DOWNLOAD_TOKEN, downloadStore.putError(body));
+        return new ResponseEntity(body, headers, responseEntity.getStatusCode());
+    }
+
+    /**
+     * Токен ошибки выдаётся только запросу, прошедшему авторизацию: GET по токену отдаёт ошибку без
+     * сессии и CSRF-проверки, поэтому хранилище наполняется только из проверенного запроса.
+     * Анонимный запрос получает обычный ответ без токена.
+     */
+    private static boolean isAuthorized(GraphQLResponse<JSONObject> response) {
+        return response.statistics != null
+                && response.statistics.authContext() != null
+                && response.statistics.authContext().getClass() != UnauthorizedContext.class;
+    }
+
+    /**
+     * Ответ GET по токену ошибки: сохранённое тело ошибки HEAD с тем же статусом 500, что и у
+     * обычного ответа с ошибкой операции.
+     */
+    private static ResponseEntity buildDownloadErrorResponseEntity(byte[] body) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setCacheControl("no-cache, no-store, must-revalidate");
+        headers.setPragma("no-cache");
+        headers.setExpires(0);
+        return new ResponseEntity(body, headers, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     private static boolean isHead(HttpServletRequest request) {
