@@ -29,6 +29,10 @@ import java.util.Base64;
  * удаляется (колбэк вытеснения). Крупный {@code byte[]} сбрасывается во временный файл, чтобы
  * не удерживать его в оперативной памяти.
  *
+ * <p>Если операция HEAD завершилась ошибкой, сюда же под отдельный токен кладётся тело
+ * ошибки: у ответа HEAD нет тела, и клиент забирает ошибку отдельным GET по токену, не
+ * исполняя операцию повторно. Токены файлов и ошибок хранятся раздельно и не взаимозаменяемы.
+ *
  * <p>Рассчитано на один фронт-узел: HEAD и GET приходят на одну ноду, файл локален.
  */
 public class DownloadStore {
@@ -44,6 +48,7 @@ public class DownloadStore {
     private final Component component;
     private final SecureRandom random = new SecureRandom();
     private final TimedCache<String, GOutputFile> store = new TimedCache<>(TTL_MS, DownloadStore::deleteIfTemp);
+    private final TimedCache<String, byte[]> errors = new TimedCache<>(TTL_MS);
 
     public DownloadStore(@NonNull Component component) {
         this.component = component;
@@ -72,6 +77,28 @@ public class DownloadStore {
      */
     public @Nullable GOutputFile take(@NonNull String token) {
         return store.poll(token);
+    }
+
+    /**
+     * Сохраняет тело ошибки операции HEAD и возвращает токен для её получения.
+     *
+     * @param errorBody сериализованный ответ с ошибкой (то, что ушло бы в тело ответа).
+     * @return непредсказуемый одноразовый токен.
+     */
+    public @NonNull String putError(byte @NonNull [] errorBody) {
+        String token = newToken();
+        errors.put(token, errorBody);
+        return token;
+    }
+
+    /**
+     * Забирает тело ошибки по токену (одноразово).
+     *
+     * @param token токен из {@link #putError(byte[])}.
+     * @return тело ошибки либо {@code null}, если токен неизвестен, израсходован или просрочен.
+     */
+    public byte @Nullable [] takeError(@NonNull String token) {
+        return errors.poll(token);
     }
 
     private GOutputFile spillIfLarge(GOutputFile file) {

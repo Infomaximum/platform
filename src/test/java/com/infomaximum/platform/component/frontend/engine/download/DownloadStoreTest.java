@@ -47,6 +47,29 @@ class DownloadStoreTest {
         assertThat(store.take("no-such-token")).isNull();
     }
 
+    /** Ошибка, положенная под токен, забирается тем же токеном одноразово. */
+    @Test
+    void errorIsTakenByTokenOnce() {
+        byte[] error = "{\"error\":{\"code\":\"some_error_code\"}}".getBytes(StandardCharsets.UTF_8);
+        String token = store.putError(error);
+
+        assertThat(token).isNotBlank();
+        assertThat(store.takeError(token)).isEqualTo(error);
+        assertThat(store.takeError(token)).isNull();
+    }
+
+    /** Токены файлов и ошибок не пересекаются: токеном ошибки нельзя забрать файл и наоборот. */
+    @Test
+    void fileAndErrorTokensAreSeparate() {
+        String fileToken = store.put(file("report.csv", "data"));
+        String errorToken = store.putError("{}".getBytes(StandardCharsets.UTF_8));
+
+        assertThat(store.takeError(fileToken)).isNull();
+        assertThat(store.take(errorToken)).isNull();
+        assertThat(store.take(fileToken)).isNotNull();
+        assertThat(store.takeError(errorToken)).isNotNull();
+    }
+
     /** Мелкий {@code byte[]} не сбрасывается на диск — остаётся как есть в памяти. */
     @Test
     void smallBodyKeptInMemory() {
