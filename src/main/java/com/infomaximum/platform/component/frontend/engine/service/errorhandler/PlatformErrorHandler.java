@@ -14,7 +14,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.MultipartException;
-import org.springframework.web.util.NestedServletException;
 
 import java.nio.ByteBuffer;
 import java.util.List;
@@ -42,7 +41,7 @@ public class PlatformErrorHandler implements ErrorHandler {
             } else if (response.getStatus() == HttpStatus.SERVICE_UNAVAILABLE.value()) {
                 ResponseEntity<byte[]> responseEntity = actionErrorHandler.handlerServiceUnavailable();
 
-                response.setStatus(responseEntity.getStatusCodeValue());
+                response.setStatus(responseEntity.getStatusCode().value());
                 responseEntity.getHeaders().forEach((name, values) -> {
                     response.getHeaders().add(name, values.get(0));
                     for (int i = 1; i < values.size(); i++) {
@@ -98,7 +97,7 @@ public class PlatformErrorHandler implements ErrorHandler {
             //поставил на клиенте медленную скорость, выбрал файл для импорта в то же пространство нажал кнопку загрузки и сразу же кнопку отмены.
             return;
         } else if (chainThrowables.size() == 3
-                && chainThrowables.get(1) instanceof NestedServletException
+                && chainThrowables.get(1) instanceof ServletException
                 && chainThrowables.get(2) instanceof IllegalArgumentException
         ) {
             //Exception в случае невалидного url, например:
