@@ -31,7 +31,7 @@ import net.minidev.json.JSONObject;
 import org.eclipse.jetty.server.Request;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.core.io.PathResource;
+import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -166,7 +166,7 @@ public class GraphQLController {
                             body = gOutputFile.body;
                         } else {
                             Path pathOutputFile = Paths.get(gOutputFile.uri);
-                            body = new PathResource(pathOutputFile);
+                            body = new FileSystemResource(pathOutputFile);
                         }
 
                         return CompletableFuture.completedFuture(
