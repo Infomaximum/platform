@@ -56,6 +56,37 @@ class DefaultGraphQLRequestBuilderTest {
         }
     }
 
+    /**
+     * Заголовок {@code X-CSRF-Token} прочитан и виден через {@link GRequestHttp#getXCsrfToken()}.
+     */
+    @Test
+    void readsXCsrfTokenHeaderIntoGRequestHttp() throws PlatformException {
+        String csrfToken = UUID.randomUUID().toString();
+        HttpServletRequest request = baseMockedRequest();
+        when(request.getHeader("X-CSRF-Token")).thenReturn(csrfToken);
+
+        DefaultGraphQLRequestBuilder builder = newBuilder();
+        try (GraphQLRequest gqlRequest = builder.build(request)) {
+            GRequestHttp gRequestHttp = (GRequestHttp) gqlRequest.getGRequest();
+            assertThat(gRequestHttp.getXCsrfToken()).isEqualTo(csrfToken);
+        }
+    }
+
+    /**
+     * Заголовок {@code X-CSRF-Token} не передан — геттер возвращает {@code null}.
+     */
+    @Test
+    void missingXCsrfTokenHeaderYieldsNull() throws PlatformException {
+        HttpServletRequest request = baseMockedRequest();
+        when(request.getHeader("X-CSRF-Token")).thenReturn(null);
+
+        DefaultGraphQLRequestBuilder builder = newBuilder();
+        try (GraphQLRequest gqlRequest = builder.build(request)) {
+            GRequestHttp gRequestHttp = (GRequestHttp) gqlRequest.getGRequest();
+            assertThat(gRequestHttp.getXCsrfToken()).isNull();
+        }
+    }
+
     private static HttpServletRequest baseMockedRequest() {
         HttpServletRequest request = mock(HttpServletRequest.class);
         when(request.getRemoteAddr()).thenReturn("127.0.0.1");

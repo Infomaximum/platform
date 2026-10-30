@@ -3,13 +3,18 @@ package com.infomaximum.platform.component.frontend.request;
 import com.infomaximum.cluster.core.remote.struct.RemoteObject;
 import com.infomaximum.cluster.graphql.struct.GRequest;
 import jakarta.servlet.http.Cookie;
+import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.io.Serializable;
 import java.net.URI;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 public class GRequestHttp extends GRequest {
 
@@ -23,6 +28,14 @@ public class GRequestHttp extends GRequest {
     private String idempotencyKey;
     private Integer xRetryCount;
     private String xRequestId;
+    private String xCsrfToken;
+
+    /**
+     * Слот «намерения ответа»: значения {@code Set-Cookie} и дополнительные заголовки,
+     * которые обработка запроса просит добавить в HTTP-ответ.
+     * */
+    private ArrayList<String> responseSetCookies;
+    private LinkedHashMap<String, String> responseHeaders;
 
     @Deprecated
     public GRequestHttp(Instant instant, RemoteAddress remoteAddress, String query, HashMap<String, Serializable> queryVariables, String operationName, String xTraceId, HashMap<String, String[]> parameters, HashMap<String, String[]> attributes, Cookie[] cookies, ArrayList<UploadFile> uploadFiles) {
@@ -47,6 +60,7 @@ public class GRequestHttp extends GRequest {
         this.idempotencyKey = builder.idempotencyKey;
         this.xRetryCount = builder.xRetryCount;
         this.xRequestId = builder.xRequestId;
+        this.xCsrfToken = builder.xCsrfToken;
     }
 
     public String getParameter(String name) {
@@ -111,6 +125,82 @@ public class GRequestHttp extends GRequest {
         return xRequestId;
     }
 
+    /**
+     * Возвращает значение HTTP-заголовка {@code X-CSRF-Token} из запроса.
+     *
+     * @return значение заголовка {@code X-CSRF-Token} либо {@code null}, если клиент его не передал.
+     */
+    public @Nullable String getXCsrfToken() {
+        return xCsrfToken;
+    }
+
+    /**
+     * Добавляет в ответ готовое значение заголовка {@code Set-Cookie}.
+     *
+     * <p>Дедупликация по имени cookie с семантикой last-writer-wins: если в слоте уже есть
+     * {@code Set-Cookie} с тем же именем cookie, он заменяется новым значением, а не добавляется
+     * второй. Так в одном ответе на одну cookie приходится максимум одна директива (корректная
+     * HTTP-семантика), и поздняя запись побеждает раннюю.
+     *
+     * @param setCookieValue значение заголовка {@code Set-Cookie}.
+     */
+    public void addResponseSetCookie(@NonNull String setCookieValue) {
+        if (responseSetCookies == null) {
+            responseSetCookies = new ArrayList<>(2);
+        }
+        String cookieName = cookieName(setCookieValue);
+        for (int i = 0; i < responseSetCookies.size(); i++) {
+            if (cookieName.equals(cookieName(responseSetCookies.get(i)))) {
+                responseSetCookies.set(i, setCookieValue);
+                return;
+            }
+        }
+        responseSetCookies.add(setCookieValue);
+    }
+
+    /**
+     * Извлекает имя cookie из значения заголовка {@code Set-Cookie} — часть до первого {@code =}
+     * (имя cookie не может содержать {@code =}). Используется для дедупликации записей по имени.
+     * Сравнение имён регистрозависимое: все cookie в слоте пишутся под фиксированными именами,
+     * расхождения в регистре одного имени не возникает.
+     */
+    private static String cookieName(String setCookieValue) {
+        int eq = setCookieValue.indexOf('=');
+        return eq < 0 ? setCookieValue.trim() : setCookieValue.substring(0, eq).trim();
+    }
+
+    /**
+     * Добавляет в ответ дополнительный заголовок (например, {@code X-CSRF-Token}). Повторный
+     * вызов с тем же именем перезаписывает значение.
+     *
+     * @param name  имя заголовка.
+     * @param value значение заголовка.
+     */
+    public void addResponseHeader(@NonNull String name, @NonNull String value) {
+        if (responseHeaders == null) {
+            responseHeaders = new LinkedHashMap<>();
+        }
+        responseHeaders.put(name, value);
+    }
+
+    /**
+     * Возвращает накопленные значения {@code Set-Cookie} для переноса в ответ.
+     *
+     * @return список значений заголовка либо {@code null}, если ничего не добавлено.
+     */
+    public @Nullable List<String> getResponseSetCookies() {
+        return responseSetCookies == null ? null : Collections.unmodifiableList(responseSetCookies);
+    }
+
+    /**
+     * Возвращает накопленные дополнительные заголовки ответа.
+     *
+     * @return отображение «имя → значение» либо {@code null}, если ничего не добавлено.
+     */
+    public @Nullable Map<String, String> getResponseHeaders() {
+        return responseHeaders == null ? null : Collections.unmodifiableMap(responseHeaders);
+    }
+
     public static class UploadFile implements RemoteObject {
 
         public final String fieldname;
@@ -140,6 +230,7 @@ public class GRequestHttp extends GRequest {
         private Integer xRetryCount;
         private String idempotencyKey;
         private String xRequestId;
+        private String xCsrfToken;
         private HashMap<String, String[]> parameters;
         private HashMap<String, String[]> attributes;
         private Cookie[] cookies;
@@ -194,6 +285,18 @@ public class GRequestHttp extends GRequest {
          */
         public Builder withXRequestId(@Nullable String xRequestId) {
             this.xRequestId = xRequestId;
+            return this;
+        }
+
+        /**
+         * Запоминает значение HTTP-заголовка {@code X-CSRF-Token} из запроса для последующей
+         * проверки защиты от CSRF.
+         *
+         * @param xCsrfToken значение заголовка либо {@code null}, если заголовка нет.
+         * @return текущий билдер.
+         */
+        public Builder withXCsrfToken(@Nullable String xCsrfToken) {
+            this.xCsrfToken = xCsrfToken;
             return this;
         }
 

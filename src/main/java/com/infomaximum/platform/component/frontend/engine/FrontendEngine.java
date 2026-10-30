@@ -13,6 +13,7 @@ import com.infomaximum.network.transport.http.builder.filter.BuilderFilter;
 import com.infomaximum.platform.Platform;
 import com.infomaximum.platform.component.frontend.engine.authorize.RequestAuthorize;
 import com.infomaximum.platform.component.frontend.engine.controller.Controllers;
+import com.infomaximum.platform.component.frontend.engine.download.DownloadStore;
 import com.infomaximum.platform.component.frontend.engine.filter.FilterGRequest;
 import com.infomaximum.platform.component.frontend.engine.idempotency.IdempotencyKeyStorage;
 import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.GraphQLRequestExecuteServiceDisable;
@@ -29,6 +30,7 @@ import com.infomaximum.platform.component.frontend.request.graphql.builder.Graph
 import com.infomaximum.platform.component.frontend.request.graphql.builder.impl.DefaultGraphQLRequestBuilder;
 import com.infomaximum.platform.prometheus.PrometheusMetricRegistry;
 import com.infomaximum.platform.sdk.component.Component;
+import com.infomaximum.platform.state.SystemStateSnapshot;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -60,8 +62,10 @@ public class FrontendEngine implements AutoCloseable {
 
     private final Controllers controllers;
     private final boolean isGraphQLDisabled;
+    private final boolean isGraphQLSubscriptionDisabled;
     private final IntrospectionChecker introspectionChecker;
     private final IdempotencyKeyStorage idempotencyKeyStorage;
+    private final DownloadStore downloadStore;
 
     private FrontendEngine(Builder builder) {
         this.builder = builder;
@@ -111,8 +115,10 @@ public class FrontendEngine implements AutoCloseable {
         }
 
         this.idempotencyKeyStorage = new IdempotencyKeyStorage(component);
+        this.downloadStore = new DownloadStore(component);
         this.controllers = new Controllers(this);
         this.isGraphQLDisabled = builder.isGraphQLDisabled;
+        this.isGraphQLSubscriptionDisabled = builder.isGraphQLSubscriptionDisabled;
         graphQLEngine.setIntrospectionDisabled(builder.isGraphQlIntrospectionDisabled);
 
         this.graphQLRequestExecuteService = isGraphQLDisabled
@@ -121,7 +127,8 @@ public class FrontendEngine implements AutoCloseable {
     }
 
     public ComponentExecutorTransportImpl.Builder registerControllers(ComponentExecutorTransportImpl.Builder builder) {
-        if (!isGraphQLDisabled) {
+        // Без контроллера подписок узел не попадает в рассылку событий подписок из других узлов кластера
+        if (!isGraphQLDisabled && !isGraphQLSubscriptionDisabled) {
             builder.withRemoteController(
                     platform.getGraphQLEngine().buildRemoteControllerGraphQLSubscribe(component, graphQLSubscribeEngine)
             );
@@ -175,6 +182,10 @@ public class FrontendEngine implements AutoCloseable {
         return network;
     }
 
+    public SystemStateSnapshot getSystemState() {
+        return platform.getSystemState();
+    }
+
     public FrontendMultipartSource getFrontendMiltipartSource() {
         return frontendMiltipartSource;
     }
@@ -207,6 +218,10 @@ public class FrontendEngine implements AutoCloseable {
         return idempotencyKeyStorage;
     }
 
+    public DownloadStore getDownloadStore() {
+        return downloadStore;
+    }
+
     @Override
     public void close() {
         if (network != null) {
@@ -231,6 +246,7 @@ public class FrontendEngine implements AutoCloseable {
         private StatisticService statisticService = new StatisticServiceImpl();
 
         private boolean isGraphQLDisabled = false;
+        private boolean isGraphQLSubscriptionDisabled = false;
         private boolean isGraphQlIntrospectionDisabled = true;
 
         private IntrospectionChecker introspectionChecker = IntrospectionChecker.getDefault();
@@ -274,6 +290,17 @@ public class FrontendEngine implements AutoCloseable {
 
         public Builder withGraphQLDisabled(boolean isGraphQLDisabled) {
             this.isGraphQLDisabled = isGraphQLDisabled;
+            return this;
+        }
+
+        /**
+         * Отключает приём событий GraphQL-подписок от других узлов кластера: контроллер подписок
+         * не регистрируется, и узел не получает события, классов которых у него может не быть.
+         *
+         * @param isGraphQLSubscriptionDisabled {@code true} — подписки отключены
+         */
+        public Builder withGraphQLSubscriptionDisabled(boolean isGraphQLSubscriptionDisabled) {
+            this.isGraphQLSubscriptionDisabled = isGraphQLSubscriptionDisabled;
             return this;
         }
 

@@ -28,8 +28,20 @@ public class GeneralExceptionBuilder {
     private static final String OBLIGATORY_PARAM = "obligatory_param";
     public static final String IDEMPOTENCY_COLLISION = "idempotency_collision";
     public static final String SYSTEM_NOT_READY = "system_not_ready";
+    public static final String CSRF_INVALID = "csrf_invalid";
 
     private GeneralExceptionBuilder() {
+    }
+
+    /**
+     * Запрос кука-сессии без корректного {@code X-CSRF-Token}. Отдельный код (не
+     * {@code access_denied}/{@code invalid_credentials}) — чтобы клиент однозначно отличил
+     * сценарий невалидной сессии и переавторизовался.
+     *
+     * @return исключение с кодом {@code csrf_invalid}.
+     */
+    public static PlatformException buildCsrfInvalidException() {
+        return EXCEPTION_FACTORY.build(CSRF_INVALID);
     }
 
     public static PlatformException buildDatabaseException(DatabaseException cause) {
@@ -101,6 +113,18 @@ public class GeneralExceptionBuilder {
 
     public static PlatformException buildGraphQLValidationException(String message) {
         return EXCEPTION_FACTORY.build("graphql_validation_error", message);
+    }
+
+    /**
+     * Ошибка прерывания выполнения GraphQL-запроса при превышении лимита глубины
+     * или сложности (классификация graphql-java {@code ExecutionAborted}).
+     *
+     * @param message исходное сообщение graphql-java
+     *                ({@code maximum query depth/complexity exceeded ...})
+     * @return платформенное исключение с кодом {@code graphql_execution_aborted}
+     */
+    public static PlatformException buildGraphQLExecutionAbortedException(String message) {
+        return EXCEPTION_FACTORY.build("graphql_execution_aborted", message);
     }
 
     public static PlatformException buildGraphQLIntrospectionDisabledException() {

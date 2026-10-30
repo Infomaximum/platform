@@ -1,5 +1,6 @@
 package com.infomaximum.platform.component.frontend.engine.controller.http.graphql;
 
+import com.infomaximum.platform.component.frontend.authcontext.UnauthorizedContext;
 import com.infomaximum.platform.component.frontend.engine.idempotency.IdempotencyKeyStorage;
 import com.infomaximum.platform.component.frontend.engine.idempotency.IdempotencyResponse;
 import com.infomaximum.platform.component.frontend.engine.idempotency.IdempotencyResponse.State;
@@ -9,6 +10,7 @@ import com.infomaximum.cluster.graphql.executor.struct.GSubscriptionPublisher;
 import com.infomaximum.cluster.graphql.struct.GRequest;
 import com.infomaximum.cluster.graphql.subscription.SingleSubscriber;
 import com.infomaximum.platform.component.frontend.engine.FrontendEngine;
+import com.infomaximum.platform.component.frontend.engine.download.DownloadStore;
 import com.infomaximum.platform.component.frontend.engine.filter.FilterGRequest;
 import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.GraphQLRequestExecuteService;
 import com.infomaximum.platform.component.frontend.engine.service.graphqlrequestexecute.struct.GraphQLResponse;
@@ -22,14 +24,18 @@ import com.infomaximum.platform.exception.GraphQLWrapperPlatformException;
 import com.infomaximum.platform.exception.PlatformException;
 import com.infomaximum.platform.sdk.exception.GeneralExceptionBuilder;
 import com.infomaximum.platform.sdk.graphql.out.GOutputFile;
+import com.infomaximum.platform.state.SystemState;
+import com.infomaximum.platform.state.SystemStateSnapshot;
 import com.infomaximum.platform.utils.EscapeUtils;
 import com.infomaximum.platform.utils.StringUtils;
 import jakarta.servlet.http.HttpServletRequest;
 import net.minidev.json.JSONObject;
+import org.checkerframework.checker.nullness.qual.NonNull;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.eclipse.jetty.server.Request;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.core.io.PathResource;
+import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -39,21 +45,59 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 public class GraphQLController {
 
     private final static Logger log = LoggerFactory.getLogger(GraphQLController.class);
 
+    /** Параметр запроса с токеном скачивания (GET-навигация по токену вместо CSRF-заголовка). */
+    private final static String PARAM_DOWNLOAD_TOKEN = "downloadToken";
+    /** Заголовок ответа HEAD с токеном подготовленного файла. */
+    final static String HEADER_DOWNLOAD_TOKEN = "X-Download-Token";
+    /** Максимальная длина сериализованного GraphQL-ответа в символах. */
+    private final static int MAX_RESPONSE_CHARS = Integer.MAX_VALUE / 3;
+
     private final FrontendEngine frontendEngine;
     private final IdempotencyKeyStorage idempotencyKeyStorage;
+    private final DownloadStore downloadStore;
 
     public GraphQLController(FrontendEngine frontendEngine) {
         this.frontendEngine = frontendEngine;
         this.idempotencyKeyStorage = frontendEngine.getIdempotencyKeyStorage();
+        this.downloadStore = frontendEngine.getDownloadStore();
     }
 
     public CompletableFuture<ResponseEntity> execute(HttpServletRequest request) {
+        boolean head = request != null && isHead(request);
+        // Отдача ранее подготовленного файла по токену (GET-навигация). Перехват ДО разбора
+        // запроса и цикла CSRF-фильтра: операция повторно не исполняется, авторизует токен.
+        if (request != null) {
+            String downloadToken = request.getParameter(PARAM_DOWNLOAD_TOKEN);
+            if (downloadToken != null) {
+                GOutputFile stored = downloadStore.take(downloadToken);
+                if (stored != null) {
+                    return CompletableFuture.completedFuture(buildFileResponseEntity(stored, request, null));
+                }
+                byte[] error = downloadStore.takeError(downloadToken);
+                if (error != null) {
+                    return CompletableFuture.completedFuture(buildDownloadErrorResponseEntity(error));
+                }
+                return CompletableFuture.completedFuture(ResponseEntity.notFound().build());
+            }
+        }
+
+        // Пока система не в фазе READY, отбиваем запрос штатным 503 ДО разбора тела.
+        SystemStateSnapshot systemState = frontendEngine.getSystemState();
+        if (systemState.state() != SystemState.READY) {
+            PlatformException notReady = GeneralExceptionBuilder.buildSystemNotReadyException(systemState);
+            GraphQLWrapperPlatformException wrapped =
+                    GraphQLExecutionResultUtils.coercionGraphQLPlatformException(notReady);
+            return CompletableFuture.completedFuture(buildResponseEntity(null, wrapped));
+        }
+
         GraphQLRequest graphQLRequest;
         try {
             graphQLRequest = frontendEngine.getGraphQLRequestBuilder().build(request);
@@ -105,7 +149,7 @@ public class GraphQLController {
                     Object data = out.data;
                     if (data instanceof JSONObject) {
                         return CompletableFuture.completedFuture(
-                                buildResponseEntity(gRequest, out)
+                                withDownloadErrorToken(buildResponseEntity(gRequest, out), head && isAuthorized(out))
                         );
                     } else if (data instanceof GSubscriptionPublisher completionPublisher) {
                         SingleSubscriber singleSubscriber = new SingleSubscriber();
@@ -115,53 +159,20 @@ public class GraphQLController {
                                     GraphQLExecutionResultUtils.buildResponse(executionResult, null);
                             return buildResponseEntity(gRequest, graphQLResponse);
                         });
-                    } else if (data instanceof GOutputFile) {
-                        GOutputFile gOutputFile = (GOutputFile) data;
-
-                        long fileSize = gOutputFile.getSize();
-
-                        HttpHeaders header = new HttpHeaders();
-                        header.add("Content-Disposition", "attachment; filename*=UTF-8''" + EscapeUtils.escapeFileNameFromContentDisposition(gOutputFile.fileName));
-                        header.setContentType(MediaType.valueOf(gOutputFile.mimeType.value));
-                        header.setContentLength(fileSize);
-                        if (gOutputFile.cache) {
-                            header.setCacheControl("public, max-age=86400");
-                        } else {
-                            header.setCacheControl("no-cache, no-store, must-revalidate");
-                            header.setPragma("no-cache");
-                            header.setExpires(0);
-                        }
-
-                        //Помечаем инфу для сервиса сбора статистики
-                        request.setAttribute(StatisticService.ATTRIBUTE_DOWNLOAD_FILE_SIZE, fileSize);
-
-                        if (gOutputFile.temp) {
-                            //Добавляем callback, что бы после отдачи файла, его удалить
-                            request.setAttribute(
-                                    RequestCompleteCallbackService.ATTRIBUTE_COMPLETE_REQUEST_CALLBACK,
-                                    new RequestCompleteCallbackService.Callback() {
-                                        @Override
-                                        public void exec(Request request) {
-                                            try {
-                                                Files.delete(Paths.get(gOutputFile.uri));
-                                            } catch (IOException e) {
-                                                log.error("Exception clear temp file", e);//Падать из-за этого не стоит
-                                            }
-                                        }
-                                    }
+                    } else if (data instanceof GOutputFile gOutputFile) {
+                        if (isHead(request)) {
+                            // Подготовка скачивания: кладём файл в store под токен и отдаём только
+                            // метаданные + токен. Тело не пишем (HEAD), temp-файл НЕ удаляем —
+                            // он нужен будущему GET по токену (закрывает двойную генерацию).
+                            String token = downloadStore.put(gOutputFile);
+                            HttpHeaders header = buildFileHeaders(gOutputFile, gRequest);
+                            header.add(HEADER_DOWNLOAD_TOKEN, token);
+                            return CompletableFuture.completedFuture(
+                                    ResponseEntity.ok().headers(header).build()
                             );
                         }
-
-                        Object body;
-                        if (gOutputFile.body != null) {
-                            body = gOutputFile.body;
-                        } else {
-                            Path pathOutputFile = Paths.get(gOutputFile.uri);
-                            body = new PathResource(pathOutputFile);
-                        }
-
                         return CompletableFuture.completedFuture(
-                                new ResponseEntity(body, header, HttpStatus.OK)
+                                buildFileResponseEntity(gOutputFile, request, gRequest)
                         );
                     } else {
                         throw new RuntimeException("Not support type out: " + out);
@@ -200,12 +211,16 @@ public class GraphQLController {
         if (isSystemNotReady) {
             headers.set(HttpHeaders.RETRY_AFTER, "3");
         }
+        applyResponseAppendix(headers, gRequest);
 
-        String sout = out.toString();
+        String sout;
         byte[] bout;
         try {
+            sout = StringUtils.toLimitedJsonString(out, MAX_RESPONSE_CHARS);
             bout = StringUtils.getBytesUTF8(sout);
         } catch (PlatformException e) {
+            log.warn("Request {}, response rejected: too large (>= {} chars)",
+                    (gRequest != null) ? GRequestUtils.getTraceRequest(gRequest) : null, MAX_RESPONSE_CHARS);
             GraphQLWrapperPlatformException wrapperPE = GraphQLExecutionResultUtils.coercionGraphQLPlatformException(e);
             return buildResponseEntity(gRequest, wrapperPE);
         }
@@ -236,6 +251,143 @@ public class GraphQLController {
         }
 
         return new ResponseEntity(bout, headers, httpStatus);
+    }
+
+    /**
+     * Для HEAD с ошибкой операции кладёт тело ошибки в хранилище скачиваний и добавляет к ответу
+     * {@link #HEADER_DOWNLOAD_TOKEN}: у ответа HEAD нет тела, и клиент забирает ошибку GET-запросом
+     * по токену. Токен одноразовый и зависит от текущего запроса, поэтому добавляется к копии
+     * заголовков и в идемпотентный кеш не попадает.
+     */
+    private ResponseEntity withDownloadErrorToken(ResponseEntity responseEntity, boolean head) {
+        if (!head
+                || !responseEntity.getStatusCode().isError()
+                || !(responseEntity.getBody() instanceof byte[] body)) {
+            return responseEntity;
+        }
+        HttpHeaders headers = new HttpHeaders();
+        headers.putAll(responseEntity.getHeaders());
+        headers.set(HEADER_DOWNLOAD_TOKEN, downloadStore.putError(body));
+        return new ResponseEntity(body, headers, responseEntity.getStatusCode());
+    }
+
+    /**
+     * Токен ошибки выдаётся только запросу, прошедшему авторизацию: GET по токену отдаёт ошибку без
+     * сессии и CSRF-проверки, поэтому хранилище наполняется только из проверенного запроса.
+     * Анонимный запрос получает обычный ответ без токена.
+     */
+    private static boolean isAuthorized(GraphQLResponse<JSONObject> response) {
+        return response.statistics != null
+                && response.statistics.authContext() != null
+                && response.statistics.authContext().getClass() != UnauthorizedContext.class;
+    }
+
+    /**
+     * Ответ GET по токену ошибки: сохранённое тело ошибки HEAD с тем же статусом 500, что и у
+     * обычного ответа с ошибкой операции.
+     */
+    private static ResponseEntity buildDownloadErrorResponseEntity(byte[] body) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setCacheControl("no-cache, no-store, must-revalidate");
+        headers.setPragma("no-cache");
+        headers.setExpires(0);
+        return new ResponseEntity(body, headers, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    private static boolean isHead(HttpServletRequest request) {
+        return "HEAD".equalsIgnoreCase(request.getMethod());
+    }
+
+    /**
+     * Собирает заголовки отдачи файла: {@code Content-Disposition: attachment},
+     * тип, длину и кэш-политику; плюс перенос слота «намерения ответа».
+     *
+     * @param gOutputFile отдаваемый файл.
+     * @param gRequest    запрос; {@code null} на пути отдачи по токену (слот не переносится).
+     * @return заголовки ответа.
+     */
+    private HttpHeaders buildFileHeaders(GOutputFile gOutputFile, @Nullable GRequest gRequest) {
+        HttpHeaders header = new HttpHeaders();
+        header.add("Content-Disposition", "attachment; filename*=UTF-8''" + EscapeUtils.escapeFileNameFromContentDisposition(gOutputFile.fileName));
+        header.setContentType(MediaType.valueOf(gOutputFile.mimeType.value));
+        header.setContentLength(gOutputFile.getSize());
+        if (gOutputFile.cache) {
+            header.setCacheControl("public, max-age=86400");
+        } else {
+            header.setCacheControl("no-cache, no-store, must-revalidate");
+            header.setPragma("no-cache");
+            header.setExpires(0);
+        }
+        applyResponseAppendix(header, gRequest);
+        return header;
+    }
+
+    /**
+     * Строит ответ с телом файла: заголовки + тело (из памяти либо потоково с диска),
+     * учёт размера для статистики и удаление temp-файла после отдачи.
+     *
+     * @param gOutputFile отдаваемый файл.
+     * @param request     HTTP-запрос (для атрибутов статистики и callback'а удаления).
+     * @param gRequest    запрос-контекст; {@code null} на пути отдачи по токену.
+     * @return ответ {@code 200} с телом файла.
+     */
+    private ResponseEntity buildFileResponseEntity(GOutputFile gOutputFile, HttpServletRequest request, @Nullable GRequest gRequest) {
+        HttpHeaders header = buildFileHeaders(gOutputFile, gRequest);
+
+        //Помечаем инфу для сервиса сбора статистики
+        request.setAttribute(StatisticService.ATTRIBUTE_DOWNLOAD_FILE_SIZE, gOutputFile.getSize());
+
+        if (gOutputFile.temp) {
+            //Добавляем callback, что бы после отдачи файла, его удалить
+            request.setAttribute(
+                    RequestCompleteCallbackService.ATTRIBUTE_COMPLETE_REQUEST_CALLBACK,
+                    new RequestCompleteCallbackService.Callback() {
+                        @Override
+                        public void exec(Request request) {
+                            try {
+                                Files.delete(Paths.get(gOutputFile.uri));
+                            } catch (IOException e) {
+                                log.error("Exception clear temp file", e);//Падать из-за этого не стоит
+                            }
+                        }
+                    }
+            );
+        }
+
+        Object body;
+        if (gOutputFile.body != null) {
+            body = gOutputFile.body;
+        } else {
+            Path pathOutputFile = Paths.get(gOutputFile.uri);
+            body = new FileSystemResource(pathOutputFile);
+        }
+
+        return new ResponseEntity(body, header, HttpStatus.OK);
+    }
+
+    /**
+     * Переносит накопленный обработкой запроса слот «намерения ответа» ({@code Set-Cookie}
+     * и дополнительные заголовки из {@link GRequestHttp}) в заголовки HTTP-ответа. Для не-HTTP
+     * запросов и пустого слота — ничего не делает.
+     *
+     * @param headers  заголовки формируемого ответа.
+     * @param gRequest запрос; слот читается, только если это {@link GRequestHttp}.
+     */
+    private static void applyResponseAppendix(@NonNull HttpHeaders headers, @Nullable GRequest gRequest) {
+        if (!(gRequest instanceof GRequestHttp gRequestHttp)) {
+            return;
+        }
+        List<String> setCookies = gRequestHttp.getResponseSetCookies();
+        if (setCookies != null) {
+            for (String setCookie : setCookies) {
+                headers.add(HttpHeaders.SET_COOKIE, setCookie);
+            }
+        }
+        Map<String, String> extraHeaders = gRequestHttp.getResponseHeaders();
+        if (extraHeaders != null) {
+            extraHeaders.forEach(headers::add);
+        }
     }
 
     public ResponseEntity getResponseFromIdempotencyKeyStorage(GRequestHttp gRequestHttp) throws PlatformException {

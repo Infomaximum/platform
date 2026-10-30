@@ -42,6 +42,30 @@ class GRequestHttpTest {
     }
 
     /**
+     * Builder с {@code withXCsrfToken} прокидывает значение в построенный {@link GRequestHttp}.
+     */
+    @Test
+    void builderPropagatesXCsrfTokenToGetter() {
+        String csrfToken = UUID.randomUUID().toString();
+
+        GRequestHttp gRequest = baseBuilder()
+                .withXCsrfToken(csrfToken)
+                .build();
+
+        assertThat(gRequest.getXCsrfToken()).isEqualTo(csrfToken);
+    }
+
+    /**
+     * Без вызова {@code withXCsrfToken} геттер возвращает {@code null} — заголовка в запросе не было.
+     */
+    @Test
+    void builderWithoutXCsrfTokenReturnsNull() {
+        GRequestHttp gRequest = baseBuilder().build();
+
+        assertThat(gRequest.getXCsrfToken()).isNull();
+    }
+
+    /**
      * Legacy 10-параметровый конструктор не задаёт {@code xRequestId} —
      * геттер возвращает {@code null} (backward-compat).
      */

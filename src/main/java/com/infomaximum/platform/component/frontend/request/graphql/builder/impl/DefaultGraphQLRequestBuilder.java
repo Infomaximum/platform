@@ -64,6 +64,7 @@ public class DefaultGraphQLRequestBuilder implements GraphQLRequestBuilder {
 
         String xTraceId = request.getHeader("X-Trace-Id");
         String xRequestId = request.getHeader("X-Request-Id");
+        String xCsrfToken = request.getHeader("X-CSRF-Token");
         String idempotencyKey = request.getHeader("Idempotency-Key");
         Integer xRetryCount = null;
         try {
@@ -178,6 +179,7 @@ public class DefaultGraphQLRequestBuilder implements GraphQLRequestBuilder {
                     .withOperationName(operationName)
                     .withXTraceId(xTraceId)
                     .withXRequestId(xRequestId)
+                    .withXCsrfToken(xCsrfToken)
                     .withXRetryCount(xRetryCount)
                     .withIdempotencyKey(idempotencyKey)
                     .withParameters(parameters)
