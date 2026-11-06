@@ -160,6 +160,12 @@ public class PlatformErrorHandler implements ErrorHandler {
             log.error("ChainThrowables, i: {}, exception: {}", i, chainThrowables.get(i).getClass().getName());
         }
 
+        if (request.getConnectionMetaData().getConnector().getServer().isStopping()) {
+            //Идёт остановка HTTP-сервера: соединения закрываются вместе с запросами в обработке, это не авария
+            log.warn("Request failed while HTTP server is stopping, crash skipped: {}", msgException);
+            return;
+        }
+
         uncaughtExceptionHandler.uncaughtException(Thread.currentThread(), new Exception(msgException, ex));
     }
 }
